@@ -11,11 +11,11 @@ export default () => {
             e.onclick = function(e) {
               // 过滤指定元素
               let mark = true;
-              EXCLUDECLASS && e.path && e.path.forEach((item) =>{
-                if(item.nodeType === 1) {
-                  typeof item.className === 'string' && item.className.indexOf(EXCLUDECLASS) > -1 ? mark = false : ''
-                }
-              })
+              // EXCLUDECLASS && e.path && e.path.forEach((item) =>{
+              //   if(item.nodeType === 1) {
+              //     typeof item.className === 'string' && item.className.indexOf(EXCLUDECLASS) > -1 ? mark = false : ''
+              //   }
+              // })
               
               if(mark) {
                 t && t(),

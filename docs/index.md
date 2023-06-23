@@ -19,7 +19,8 @@ features: # 可选的
 postList: simple
 ---
 
-## 常用工具 [更多](https://xustudyxu.github.io/img/01.png)
+## 常用工具
+
 ::: cardImgList 3
 ```yaml
 config:
@@ -48,7 +49,14 @@ data:
     desc: 傻瓜级ElasticSearch搜索引擎ORM框架
  ```
 :::
-
+<div class="article-wrapper">
+<dl>
+<dd></dd>
+<dt>
+<a href="/archives/" style="display: block;text-align:right;" class="more">更多工具&gt;</a>
+</dt>
+</dl>
+</div>
 <br/>
 
 
