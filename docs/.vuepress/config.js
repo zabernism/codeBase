@@ -7,8 +7,8 @@ module.exports = {
   theme: 'vdoing', // 使用依赖包主题
   // theme: require.resolve('../../vdoing'), // 使用本地主题 (先将vdoing主题文件下载到本地：https://github.com/xugaoyi/vuepress-theme-vdoing)
 
-  title: "Java全栈知识体系",
-  description: '包含: Java 基础, Java 部分源码, JVM, Spring, Spring Boot, Spring Cloud, 数据库原理, MySQL, ElasticSearch, MongoDB, Docker, k8s, CI&CD, Linux, DevOps, 分布式, 中间件, 开发工具, Git, IDE, 源码阅读，读书笔记, 开源项目...',
+  title: "CodeBase",
+  description: '🚀包含:Java及进阶相关知识梳理, Java部分源码, 效率工具分享 ',
   // base: '/', // 默认'/'。如果你想将你的网站部署到如 https://foo.github.io/bar/，那么 base 应该被设置成 "/bar/",（否则页面将失去样式等文件）
   head: [ // 注入到页面<head> 中的标签，格式[tagName, { attrName: attrValue }, innerHTML?]
     ['link', { rel: 'icon', href: '/img/favicon.ico' }], //favicons，资源放在public文件夹
@@ -23,6 +23,8 @@ module.exports = {
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
+      {
+        text: '面试', link: '/pages/82bfad/'},
       {
         text: '指南', link: '/pages/a2f161/', items: [
           { text: '主题初衷与诞生', link: '/pages/52d5c3/' },
@@ -60,7 +62,6 @@ module.exports = {
       { text: '资源', link: '/pages/db78e2/' },
       { text: '案例', link: '/pages/5d571c/' },
       { text: '问答', link: '/pages/9cc27d/' },
-      { text: '赞助', link: '/pages/1b12ed/' },
     ],
     sidebarDepth: 2, // 侧边栏显示深度，默认1，最大2（显示到h3标题）
     logo: '/img/logo.png', // 导航栏logo
@@ -109,7 +110,7 @@ module.exports = {
         {
           iconClass: 'icon-github',
           title: 'GitHub',
-          link: 'https://github.com/zabernism'
+          link: 'https://github.com/zabernism/blog'
         }
       ]
     },
