@@ -47,7 +47,7 @@ data:
     link: https://easy-es.cn/
     name: Easy-Es官网
     desc: 傻瓜级ElasticSearch搜索引擎ORM框架
- ```
+```
 :::
 <div class="article-wrapper">
 <dl>
@@ -64,9 +64,8 @@ data:
 还有更多好玩的等你去探索吧~
 
 ::: center
-<img src="https://fastly.jsdelivr.net/gh/xugaoyi/image_store@master/blog/qrcode.zdqv9mlfc0g.jpg"  style="width:190px;" />
+
 :::
 
 <br/>
-
 
