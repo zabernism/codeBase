@@ -45,8 +45,16 @@ const categoryNav = categories.map(c => ({
     .filter(Boolean),
 }))
 
+// base 自适应：
+// - Vercel 部署在域名根目录，必须用 '/'
+// - 其他环境（GitHub Pages 子路径）用 VP_BASE，默认 '/'
+// 说明：GitHub Actions 会把 dist 拷贝到仓库根，仓库以 /codeBase/ 提供服务，
+//       所以 base 设为 /codeBase/ 时物理路径与 URL 前缀一致；而 Vercel 直接服务于
+//       域名根，base 必须为 '/'，否则所有 /assets/* 资源都会带上 /codeBase/ 前缀而 404。
+const base = process.env.VERCEL ? '/' : (process.env.VP_BASE || '/')
+
 export default defineConfig({
-  base: process.env.VP_BASE || '/',
+  base,
   ignoreDeadLinks: true,
   lang: 'zh-CN',
   markdown: {
@@ -56,9 +64,6 @@ export default defineConfig({
   },
   title: '面试通关手册 · AI + Java 后端',
   description: 'AI + Java 后端面试全覆盖：Java/并发/Spring/AI/RAG/Agent/云原生/系统设计，含追问与碳管理业务场景',
-  head: [
-    ['link', { rel: 'stylesheet', href: '/custom.css' }],
-  ],
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
