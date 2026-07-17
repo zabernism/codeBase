@@ -1,37 +1,37 @@
-# 面试题站 · 双分支自动部署说明
+# 面试题站 · 自动部署说明（master 单分支）
 
-本仓库使用 **「源码分支 + 渲染分支」** 的双分支结构，配合 GitHub Actions 实现推送即部署。
+本仓库使用 **单一 `master` 分支** 同时承载「源码」与「渲染后的站点」：
 
-## 分支模型
+- **源码**：`面试_带追问.md`（原始面试题）、`images/`（架构图 SVG）、`web/`（VitePress 工程 + `scripts/split.mjs`）
+- **渲染站点**：根目录的 `index.html`、各章节 HTML、`assets/`、`images/`（由 CI 构建后自动提交到 `master` 根目录）
 
-| 分支 | 内容 | 维护方 |
-| --- | --- | --- |
-| `main` | 源码：`面试_带追问.md`（原始面试题）、`images/`（架构图）、`web/`（VitePress 工程 + `scripts/split.mjs`） | 你（手动编辑） |
-| `gh-pages` | 渲染后的静态站（由 CI 从 `main` 自动构建并发布） | GitHub Actions（勿手动修改） |
-
-> `gh-pages` 分支由 CI 自动生成与更新，请勿在该分支手动提交。
+推送 `master` 即触发 GitHub Actions：拆分章节 → 构建 VitePress → 把产物 `cp` 到根目录并提交（`[skip ci]` 防止循环触发）。
 
 ## 本地预览
 
 ```bash
 cd web
-npm run dev      # 会自动从 面试_带追问.md 拆分出 27 个章节页再启动
+npm run dev      # 自动从 面试_带追问.md 拆分出 27 个章节页再启动
 ```
 
 ## 本地构建
 
 ```bash
 cd web
-npm run build    # 先 split 再 vitepress build，产物在 web/docs/.vitepress/dist/
+env -u NODE_OPTIONS npm run build    # 本机有 NODE_OPTIONS 守卫时需去掉；产物在 web/docs/.vitepress/dist/
 ```
+
+> 说明：本地 `npm run build` 只产出 `web/docs/.vitepress/dist/`，**不会**把 HTML 复制到仓库根目录（那是 CI 的最后一步）。仓库根目录的站点 HTML 由 CI 提交维护。
 
 ## 推送部署
 
 ```bash
-git push -u origin main    # 触发 CI：自动拆分+构建并发布到 gh-pages
+git push origin master    # 触发 CI：自动拆分 + 构建，并把渲染结果提交到 master 根目录
 ```
 
-首次需在 GitHub 仓库 **Settings → Pages → Source** 选择 **Deploy from a branch** → `gh-pages` / `root`。
+## 站点激活（一次性）
+
+GitHub 仓库 **Settings → Pages → Source** 选择 **Deploy from a branch** → `master` / `root`。
 
 ## 修改内容
 
@@ -40,4 +40,5 @@ git push -u origin main    # 触发 CI：自动拆分+构建并发布到 gh-page
 ## 目录约定
 
 - `web/scripts/split.mjs`：把 `面试_带追问.md` 按 `## ` 切成 27 个章节页（`web/docs/NN-*.md`、`web/docs/appendix-*.md`），并把 `images/*.svg` 复制到 `web/docs/public/images/`。
-- 这些生成的章节页与静态资源**不进 `main` 分支**（见 `.gitignore`），只在 CI 构建或本地 `npm run build` 时生成。
+- 这些生成的章节页与静态资源**不进 `master` 分支**（见 `.gitignore`），仅在 CI 构建时生成；渲染后的站点 HTML 由 CI 提交到根目录。
+- `.gitignore` 同时排除本地资料（`面试.md`、`周计划/`、`*.bak*`、`学习计划.md`、`.workbuddy/`），它们不会进仓库。
