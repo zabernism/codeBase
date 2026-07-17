@@ -1,12 +1,15 @@
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { categories, slugToCategory } from './categories.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..', '..')      // web/scripts/ -> 面试/ (repo root)
 const src = join(root, '面试_带追问.md')
 const docsDir = join(__dirname, '..', 'docs') // web/scripts/ -> web/docs
-const publicImg = join(docsDir, 'public', 'images')
+const dataDir = join(docsDir, 'data')
+const publicDir = join(docsDir, 'public')
+const publicImg = join(publicDir, 'images')
 
 const slugMap = [
   ['一、Java基础与分布式系统（AI场景下）', '01-java-basics'],
@@ -54,19 +57,81 @@ if (chapters.length !== slugMap.length) {
   console.error(`章节数 ${chapters.length} ≠ 期望 ${slugMap.length}`)
   process.exit(1)
 }
+
+mkdirSync(dataDir, { recursive: true })
 mkdirSync(publicImg, { recursive: true })
+
+// 把行内类似 HTML 标签的尖括号文本（如 /proc/<pid>/stat、List<Message>）做安全转义，
+// 避免 markdown.html:true 时 Vue 编译器报 "Element is missing end tag"。
+// 跳过代码块与行内代码（反引号）内的尖括号。
+function escapeHtmlLikeTags(line) {
+  const parts = line.split(/(`[^`]*`)/g)
+  return parts.map((part, idx) => {
+    if (idx % 2 === 1) return part
+    return part.replace(/<([^>]*)>/g, '&lt;$1&gt;')
+  }).join('')
+}
+
+const questions = []
 for (let i = 0; i < chapters.length; i++) {
   const { title, lines: body } = chapters[i]
   const slug = slugMap[i][1]
-  let content = body.join('\n')
+  const category = slugToCategory[slug] || '未分类'
+
+  let qIdx = 0
+  let fIdx = 0
+  let inCode = false
+
+  const modified = body.map(line => {
+    if (/^```/.test(line)) inCode = !inCode
+    if (inCode) return line
+
+    if (/^### /.test(line)) {
+      qIdx++
+      const anchor = `q-${i + 1}-${qIdx}`
+      questions.push({
+        chapter: title,
+        category,
+        slug,
+        anchor,
+        title: line.replace(/^### /, '').trim(),
+        level: 3,
+      })
+      return escapeHtmlLikeTags(`${line} {#${anchor}}`)
+    }
+
+    if (/^#### /.test(line)) {
+      fIdx++
+      return escapeHtmlLikeTags(`${line} {#f-${i + 1}-${fIdx}}`)
+    }
+
+    return escapeHtmlLikeTags(line)
+  })
+
+  let content = modified.join('\n')
   content = content.replace(/\]\((\.\/)?images\//g, '](/images/')
   const out = `---\ntitle: ${title}\n---\n\n# ${title}\n\n${content}\n`
   writeFileSync(join(docsDir, `${slug}.md`), out)
 }
+
+const categoryMeta = categories.map(c => ({
+  name: c.name,
+  slugs: c.slugs,
+  count: questions.filter(q => q.category === c.name).length,
+}))
+
+const dataPayload = { categories: categoryMeta, questions }
+writeFileSync(join(dataDir, 'questions.json'), JSON.stringify(dataPayload, null, 2))
+writeFileSync(
+  join(dataDir, 'questions.mjs'),
+  `export default ${JSON.stringify(dataPayload, null, 2)}\n`
+)
+
 const imgSrc = join(root, 'images')
 if (existsSync(imgSrc)) {
   for (const f of readdirSync(imgSrc)) {
     if (f.endsWith('.svg')) copyFileSync(join(imgSrc, f), join(publicImg, f))
   }
 }
-console.log(`split done: ${chapters.length} chapters -> docs/`)
+
+console.log(`split done: ${chapters.length} chapters -> docs/ | ${questions.length} questions -> data/questions.json`)

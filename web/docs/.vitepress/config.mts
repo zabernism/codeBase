@@ -1,8 +1,7 @@
 import { defineConfig } from 'vitepress'
-import { execSync } from 'child_process'
+import { categories } from '../../scripts/categories.mjs'
 
-let ghUser = 'YOUR_GITHUB_USERNAME'
-try { ghUser = execSync('gh api user --jq .login 2>/dev/null').toString().trim() || ghUser } catch {}
+const ghUser = 'zabernism'
 
 const chapters = [
   { text: '一、Java基础与分布式系统', link: '/01-java-basics' },
@@ -34,21 +33,37 @@ const chapters = [
   { text: '附录：面试高频开放题参考回答', link: '/appendix-open-questions' },
 ]
 
+const slugMap = new Map(chapters.map(c => [c.link.slice(1), c]))
+
+const categoryNav = categories.map(c => ({
+  text: c.name,
+  items: c.slugs
+    .map(slug => {
+      const ch = slugMap.get(slug)
+      return ch ? { text: ch.text, link: ch.link } : null
+    })
+    .filter(Boolean),
+}))
+
 export default defineConfig({
   base: process.env.VP_BASE || '/',
   ignoreDeadLinks: true,
   lang: 'zh-CN',
   markdown: {
-    // 源文档含 List<Message> 等形如 <Tag> 的纯文本，会被 Vue 编译器误判为未闭合 HTML 标签，
-    // 关闭原始 HTML 解析可将其作为纯文本转义，避免构建失败（图片仍用 markdown 语法，不受影响）。
-    html: false,
+    // 允许在 Markdown 中使用 Vue 组件（如 <PracticePage />）。
+    // 源文档中的 List<Message> 等尖括号文本已在 split.mjs 中做安全转义。
+    html: true,
   },
   title: '面试通关手册 · AI + Java 后端',
   description: 'AI + Java 后端面试全覆盖：Java/并发/Spring/AI/RAG/Agent/云原生/系统设计，含追问与碳管理业务场景',
+  head: [
+    ['link', { rel: 'stylesheet', href: '/custom.css' }],
+  ],
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
-      { text: '第一章', link: '/01-java-basics' },
+      { text: '刷题', link: '/practice' },
+      ...categoryNav,
       { text: 'GitHub', link: `https://github.com/${ghUser}/codeBase` },
     ],
     sidebar: [

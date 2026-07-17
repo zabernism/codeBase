@@ -1,0 +1,223 @@
+/* 全局辅助样式 */
+
+:root {
+  --vp-c-brand-1: #3451b2;
+  --vp-c-brand-2: #4b66d8;
+  --vp-c-brand-3: #5672e4;
+  --vp-c-brand-soft: rgba(84, 114, 228, 0.14);
+}
+
+/* 首页 Hero 更紧凑 */
+.VPHero {
+  padding: 64px 0 48px !important;
+}
+
+.VPHero .name,
+.VPHero .text {
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.VPHero .tagline {
+  max-width: 640px;
+  margin-top: 12px;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+.VPHero .actions {
+  margin-top: 32px;
+}
+
+.VPHero .action .VPButton {
+  border-radius: 999px;
+  padding: 12px 28px;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.VPHero .action .VPButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(52, 81, 178, 0.22);
+}
+
+/* 首页特性卡片改为分类入口 */
+.VPFeatures {
+  padding-top: 24px;
+  padding-bottom: 64px;
+}
+
+.VPFeatures .items {
+  gap: 20px;
+}
+
+.VPFeatures .item {
+  border-radius: 16px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.VPFeatures .item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  border-color: var(--vp-c-brand-1);
+}
+
+.VPFeatures .item .title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.VPFeatures .item .details {
+  font-size: 0.92rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.5;
+}
+
+/* 刷题页 */
+.practice-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 32px 64px;
+}
+
+.practice-title {
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 8px;
+}
+
+.practice-desc {
+  font-size: 1.05rem;
+  color: var(--vp-c-text-2);
+  margin-bottom: 28px;
+}
+
+.category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 32px;
+  padding: 8px;
+  background: var(--vp-c-bg-soft);
+  border-radius: 12px;
+  border: 1px solid var(--vp-c-divider);
+}
+
+.category-tabs .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--vp-c-text-1);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.category-tabs .tab:hover {
+  background: var(--vp-c-bg-mute);
+}
+
+.category-tabs .tab.active {
+  background: var(--vp-c-brand-1);
+  color: #fff;
+}
+
+.category-tabs .tab .count {
+  font-size: 0.75rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  opacity: 0.9;
+}
+
+.category-tabs .tab.active .count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.question-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.group-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.question-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.question-list li {
+  margin: 0;
+}
+
+.question-link {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--vp-c-text-1);
+  font-size: 0.94rem;
+  line-height: 1.5;
+  text-decoration: none;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.question-link:hover {
+  background: var(--vp-c-brand-soft);
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.loading,
+.empty {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--vp-c-text-2);
+}
+
+@media (max-width: 768px) {
+  .practice-page {
+    padding: 16px 20px 48px;
+  }
+
+  .question-list {
+    grid-template-columns: 1fr;
+  }
+
+  .category-tabs .tab {
+    padding: 7px 12px;
+    font-size: 0.88rem;
+  }
+}
