@@ -1,4 +1,4 @@
-/* 全局辅助样式 */
+/* 全局品牌色（VitePress 主题色变量） */
 
 :root {
   --vp-c-brand-1: #3451b2;
@@ -7,26 +7,39 @@
   --vp-c-brand-soft: rgba(84, 114, 228, 0.14);
 }
 
-/* 首页 Hero 更紧凑 */
+/* 首页 Hero */
+
 .VPHero {
   padding: 64px 0 48px !important;
 }
 
-.VPHero .name,
-.VPHero .text {
+.VPHero .name {
+  font-size: clamp(2.5rem, 5.5vw, 4.5rem);
+  line-height: 1.2;
   letter-spacing: -0.04em;
-  line-height: 1.1;
+  margin: 0 0 0.35em;
+}
+
+.VPHero .text {
+  font-size: clamp(1.75rem, 3.5vw, 3rem);
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  color: var(--vp-c-text-1);
+  margin: 0;
 }
 
 .VPHero .tagline {
   max-width: 640px;
-  margin-top: 12px;
+  margin-top: 18px;
   font-size: 1.1rem;
-  line-height: 1.6;
+  line-height: 1.7;
   color: var(--vp-c-text-2);
 }
 
 .VPHero .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
   margin-top: 32px;
 }
 
@@ -36,6 +49,7 @@
   font-size: 1rem;
   font-weight: 600;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  min-height: 44px;
 }
 
 .VPHero .action .VPButton:hover {
@@ -44,6 +58,7 @@
 }
 
 /* 首页特性卡片改为分类入口 */
+
 .VPFeatures {
   padding-top: 24px;
   padding-bottom: 64px;
@@ -81,6 +96,7 @@
 }
 
 /* 刷题页 */
+
 .practice-page {
   max-width: 1200px;
   margin: 0 auto;
@@ -88,16 +104,17 @@
 }
 
 .practice-title {
-  font-size: 2.25rem;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 700;
   letter-spacing: -0.03em;
   margin-bottom: 8px;
 }
 
 .practice-desc {
-  font-size: 1.05rem;
+  font-size: 1rem;
   color: var(--vp-c-text-2);
   margin-bottom: 28px;
+  line-height: 1.6;
 }
 
 .category-tabs {
@@ -109,6 +126,8 @@
   background: var(--vp-c-bg-soft);
   border-radius: 12px;
   border: 1px solid var(--vp-c-divider);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .category-tabs .tab {
@@ -124,6 +143,9 @@
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  min-height: 36px;
+  flex: 0 0 auto;
 }
 
 .category-tabs .tab:hover {
@@ -155,12 +177,13 @@
 }
 
 .group-title {
-  font-size: 1.25rem;
+  font-size: clamp(1.1rem, 2.5vw, 1.35rem);
   font-weight: 600;
   color: var(--vp-c-text-1);
   margin-bottom: 14px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--vp-c-divider);
+  word-break: break-word;
 }
 
 .question-list {
@@ -207,17 +230,105 @@
   color: var(--vp-c-text-2);
 }
 
+/* 平板与手机端适配 */
+
 @media (max-width: 768px) {
+  .VPHero {
+    padding: 48px 0 36px !important;
+  }
+
+  .VPHero .name {
+    margin-bottom: 0.25em;
+  }
+
+  .VPHero .tagline {
+    font-size: 1rem;
+    margin-top: 14px;
+  }
+
+  .VPHero .actions {
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .VPHero .action .VPButton {
+    padding: 10px 22px;
+    font-size: 0.95rem;
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .VPFeatures {
+    padding-top: 12px;
+    padding-bottom: 48px;
+  }
+
+  .VPFeatures .items {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+  }
+
+  .VPFeatures .item {
+    padding: 18px 20px;
+  }
+
   .practice-page {
     padding: 16px 20px 48px;
+  }
+
+  .practice-desc {
+    margin-bottom: 20px;
+  }
+
+  .category-tabs {
+    gap: 8px;
+    padding: 6px;
+    margin-bottom: 24px;
+    flex-wrap: nowrap;
+  }
+
+  .category-tabs .tab {
+    padding: 7px 12px;
+    font-size: 0.88rem;
   }
 
   .question-list {
     grid-template-columns: 1fr;
   }
 
-  .category-tabs .tab {
-    padding: 7px 12px;
+  .question-link {
+    font-size: 0.92rem;
+  }
+}
+
+/* 小屏手机额外收紧 */
+
+@media (max-width: 480px) {
+  .VPHero {
+    padding: 36px 0 28px !important;
+  }
+
+  .VPHero .tagline {
+    font-size: 0.95rem;
+  }
+
+  .VPFeatures .item {
+    padding: 16px 18px;
+  }
+
+  .VPFeatures .item .title {
+    font-size: 1rem;
+  }
+
+  .VPFeatures .item .details {
     font-size: 0.88rem;
+  }
+
+  .practice-page {
+    padding: 14px 16px 40px;
+  }
+
+  .practice-desc {
+    font-size: 0.95rem;
   }
 }
