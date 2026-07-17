@@ -72,6 +72,61 @@ function escapeHtmlLikeTags(line) {
   }).join('')
 }
 
+// 把"追问"块里的列表项转成真正的标题，让每个 追问N 成为可见的 h5 标题。
+// 源文档结构（保持不变）：
+//   #### 追问：
+//   - 追问1：<问题>
+//     - **答**：<答案>
+//       - 子点
+// 转换后（站点渲染）：
+//   #### 追问：
+//   ##### 追问1：<问题>   {锚点}
+//   **答**：<答案>
+//   - 子点
+// 注意：仅对 `#### 追问` 之后的列表块生效，不影响 详细解答 里的流程阶段小标题。
+function transformFollowups(lines, chapterIdx, state) {
+  const out = []
+  let inFollowup = false
+  for (const line of lines) {
+    if (/^####\s*追问/.test(line)) {
+      inFollowup = true
+      out.push(line) // 保留"追问："小节标题（已带 f- 锚点）
+      continue
+    }
+    if (inFollowup) {
+      // 遇到新题/新章/其它 h4 标题，退出追问块
+      if (/^### /.test(line) || /^## /.test(line) || /^#### /.test(line)) {
+        inFollowup = false
+        out.push(line)
+        continue
+      }
+      const m = line.match(/^(\s*)- (.+)$/)
+      if (m) {
+        const indent = m[1].length
+        const rest = m[2]
+        if (indent === 0) {
+          // 顶层列表项 = 一个追问问题 → 转成 h5 标题（fuIdx 为整章连续计数，保证锚点唯一）
+          state.fuIdx++
+          out.push(`##### ${rest} {#fu-${chapterIdx}-${state.fuIdx}}`)
+          continue
+        } else if (indent === 2) {
+          // 缩进 2 的列表项 = 答案行 → 变成段落（去掉 "- " 标记）
+          out.push(rest)
+          continue
+        } else {
+          // 更深层 → 整体减 2 空格缩进，保持为答案下的子列表
+          out.push(line.slice(2))
+          continue
+        }
+      }
+      out.push(line)
+      continue
+    }
+    out.push(line)
+  }
+  return out
+}
+
 const questions = []
 for (let i = 0; i < chapters.length; i++) {
   const { title, lines: body } = chapters[i]
@@ -108,7 +163,8 @@ for (let i = 0; i < chapters.length; i++) {
     return escapeHtmlLikeTags(line)
   })
 
-  let content = modified.join('\n')
+  const transformed = transformFollowups(modified, i + 1, { fuIdx: 0 })
+  let content = transformed.join('\n')
   content = content.replace(/\]\((\.\/)?images\//g, '](/images/')
   const out = `---\ntitle: ${title}\n---\n\n# ${title}\n\n${content}\n`
   writeFileSync(join(docsDir, `${slug}.md`), out)
