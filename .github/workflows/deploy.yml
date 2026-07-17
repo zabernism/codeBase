@@ -31,7 +31,11 @@ jobs:
         working-directory: web
         run: npm run build
         env:
-          VP_BASE: /${{ github.event.repository.name }}/
+          # 站点绑定了自定义域名 blog.zs666.asia，GitHub Pages 自定义域名下站点服务于
+          # 域名根 '/'，故 base 必须为 '/'(不再带 /codeBase/ 仓库名前缀)。
+          # 若以后在 Vercel 等根目录托管部署，config.mts 已对 VERCEL 环境同样强制 '/'，无需改动。
+          # 注意：改为 '/' 后，原 zabernism.github.io/codeBase/ 子路径访问将失效(已被自定义域名取代)。
+          VP_BASE: /
       - name: Commit built site to master root
         run: |
           cp -r web/docs/.vitepress/dist/* .

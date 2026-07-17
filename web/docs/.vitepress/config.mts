@@ -46,11 +46,10 @@ const categoryNav = categories.map(c => ({
 }))
 
 // base 自适应：
-// - Vercel 部署在域名根目录，必须用 '/'
-// - 其他环境（GitHub Pages 子路径）用 VP_BASE，默认 '/'
-// 说明：GitHub Actions 会把 dist 拷贝到仓库根，仓库以 /codeBase/ 提供服务，
-//       所以 base 设为 /codeBase/ 时物理路径与 URL 前缀一致；而 Vercel 直接服务于
-//       域名根，base 必须为 '/'，否则所有 /assets/* 资源都会带上 /codeBase/ 前缀而 404。
+// - Vercel 构建环境（自动注入 VERCEL 变量）：站点服务于域名根，base 强制 '/'
+// - GitHub Pages 绑定了自定义域名 blog.zs666.asia：自定义域名下站点同样服务于域名根 '/'
+//   （CI 已把 VP_BASE 设为 '/'），故所有目标环境当前均用 base '/'
+// - 仅当改回 zabernism.github.io/codeBase/ 这种 project 子路径托管时，才需把 VP_BASE 设回 /codeBase/
 const base = process.env.VERCEL ? '/' : (process.env.VP_BASE || '/')
 
 export default defineConfig({
@@ -64,6 +63,10 @@ export default defineConfig({
   },
   title: '面试通关手册 · AI + Java 后端',
   description: 'AI + Java 后端面试全覆盖：Java/并发/Spring/AI/RAG/Agent/云原生/系统设计，含追问与碳管理业务场景',
+  // favicon：站点当前所有目标均 base '/'，故用根路径 /favicon.svg（文件置于 public/，由 VitePress 拷贝到 dist 根）
+  head: [
+    ['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
+  ],
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
