@@ -1,0 +1,88 @@
+<svg viewBox="0 0 680 540" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="智能碳足迹报告生成系统架构图">
+  <title>智能碳足迹报告生成系统</title>
+  <defs>
+    <marker id="a4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .h{font:500 13px sans-serif}
+      .cs{font:400 11px sans-serif}
+      .cap{font:400 11px sans-serif;fill:#888780}
+      .step{font:500 11px sans-serif;fill:#888780}
+    </style>
+  </defs>
+  <rect width="680" height="540" fill="#ffffff"/>
+  <text x="340" y="28" text-anchor="middle" style="font:500 15px sans-serif;fill:#26215C">智能碳足迹报告生成系统 · 端到端流水线（项目二）</text>
+
+  <rect x="40" y="50" width="145" height="130" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text class="h" x="112" y="70" text-anchor="middle" dominant-baseline="central" fill="#0C447C">① 数据输入</text>
+  <line x1="56" y1="82" x2="169" y2="82" stroke="#85B7EB" stroke-width="0.5"/>
+  <text class="cs" x="52" y="100" dominant-baseline="central" fill="#0C447C">· LCA 模型数据</text>
+  <text class="cap" x="58" y="114" dominant-baseline="central">GWP / CED 指标</text>
+  <text class="cs" x="52" y="130" dominant-baseline="central" fill="#0C447C">· 企业碳数据</text>
+  <text class="cap" x="58" y="144" dominant-baseline="central">IoT / API / 录入</text>
+  <text class="cs" x="52" y="160" dominant-baseline="central" fill="#0C447C">· HiQLCD 因子库</text>
+  <path d="M185 115 L195 115" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+
+  <rect x="195" y="50" width="145" height="130" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+  <text class="h" x="267" y="70" text-anchor="middle" dominant-baseline="central" fill="#085041">② 计算引擎</text>
+  <line x1="211" y1="82" x2="324" y2="82" stroke="#5DCAA5" stroke-width="0.5"/>
+  <text class="cs" x="207" y="100" dominant-baseline="central" fill="#085041">· Flink 实时聚合</text>
+  <text class="cap" x="213" y="114" dominant-baseline="central">碳数据流/异常检测</text>
+  <text class="cs" x="207" y="130" dominant-baseline="central" fill="#085041">· LCA 计算引擎</text>
+  <text class="cap" x="213" y="144" dominant-baseline="central">ISO 14040/14044</text>
+  <text class="cs" x="207" y="160" dominant-baseline="central" fill="#085041">· Spring Batch 批量</text>
+  <path d="M340 115 L350 115" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+
+  <rect x="350" y="50" width="145" height="130" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="h" x="422" y="70" text-anchor="middle" dominant-baseline="central" fill="#26215C">③ AI 生成</text>
+  <line x1="366" y1="82" x2="479" y2="82" stroke="#AFA9EC" stroke-width="0.5"/>
+  <text class="cs" x="362" y="100" dominant-baseline="central" fill="#26215C">· Prompt 章节模板</text>
+  <text class="cap" x="368" y="114" dominant-baseline="central">概述/方法/结果/结论</text>
+  <text class="cs" x="362" y="130" dominant-baseline="central" fill="#26215C">· Spring AI ChatClient</text>
+  <text class="cap" x="368" y="144" dominant-baseline="central">Structured Output</text>
+  <text class="cs" x="362" y="160" dominant-baseline="central" fill="#26215C">· Function Calling</text>
+  <path d="M495 115 L505 115" stroke="#534AB7" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+
+  <rect x="505" y="50" width="135" height="130" rx="10" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+  <text class="h" x="572" y="70" text-anchor="middle" dominant-baseline="central" fill="#412402">④ 报告输出</text>
+  <line x1="521" y1="82" x2="624" y2="82" stroke="#FAC775" stroke-width="0.5"/>
+  <text class="cs" x="517" y="100" dominant-baseline="central" fill="#412402">· Thymeleaf 模板</text>
+  <text class="cs" x="517" y="118" dominant-baseline="central" fill="#412402">· OpenHTMLToPDF</text>
+  <text class="cap" x="523" y="132" dominant-baseline="central">中文/表格/图表</text>
+  <text class="cs" x="517" y="148" dominant-baseline="central" fill="#412402">· MinIO 归档</text>
+  <text class="cs" x="517" y="166" dominant-baseline="central" fill="#412402">· 版本管理/对比</text>
+
+  <text class="h" x="40" y="208" fill="#26215C">核心流程 · 单份报告生成时序</text>
+  <line x1="40" y1="218" x2="640" y2="218" stroke="#B4B2A9" stroke-width="0.5"/>
+
+  <rect x="40" y="230" width="290" height="36" rx="6" fill="#F6F6FB" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="step" x="50" y="248" dominant-baseline="central">1</text>
+  <text class="cs" x="68" y="248" dominant-baseline="central" fill="#26215C">用户发起 → 任务入队 RabbitMQ</text>
+  <rect x="350" y="230" width="290" height="36" rx="6" fill="#F6F6FB" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="step" x="360" y="248" dominant-baseline="central">2</text>
+  <text class="cs" x="378" y="248" dominant-baseline="central" fill="#26215C">消费 → 拉取 LCA 结果 + 因子数据</text>
+  <rect x="40" y="274" width="290" height="36" rx="6" fill="#F6F6FB" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="step" x="50" y="292" dominant-baseline="central">3</text>
+  <text class="cs" x="68" y="292" dominant-baseline="central" fill="#26215C">分章节 Prompt 注入 → 调用大模型</text>
+  <rect x="350" y="274" width="290" height="36" rx="6" fill="#F6F6FB" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="step" x="360" y="292" dominant-baseline="central">4</text>
+  <text class="cs" x="378" y="292" dominant-baseline="central" fill="#26215C">Function Calling 实时补充计算数据</text>
+  <rect x="40" y="318" width="290" height="36" rx="6" fill="#F6F6FB" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="step" x="50" y="336" dominant-baseline="central">5</text>
+  <text class="cs" x="68" y="336" dominant-baseline="central" fill="#26215C">Schema 校验 → 拼接完整 HTML</text>
+  <rect x="350" y="318" width="290" height="36" rx="6" fill="#F6F6FB" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="step" x="360" y="336" dominant-baseline="central">6</text>
+  <text class="cs" x="378" y="336" dominant-baseline="central" fill="#26215C">HTML→PDF → MinIO → 通知用户</text>
+
+  <rect x="40" y="370" width="600" height="58" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+  <text class="h" x="56" y="388" dominant-baseline="central" fill="#2C2C2A">关键技术点</text>
+  <text class="cs" x="56" y="406" dominant-baseline="central" fill="#444441">· Prompt 模板按 ISO 14067 章节划分 · Structured Output 保证生成字段 schema 一致</text>
+  <text class="cs" x="56" y="422" dominant-baseline="central" fill="#444441">· Function Calling 让大模型按需回调 LCA 引擎 · 报告版本 Git 式对比审计</text>
+
+  <rect x="40" y="442" width="600" height="84" rx="8" fill="none" stroke="#B4B2A9" stroke-width="0.5" stroke-dasharray="3 3"/>
+  <text class="h" x="56" y="460" dominant-baseline="central" fill="#26215C">关键指标</text>
+  <text class="cs" x="56" y="478" dominant-baseline="central" fill="#444441">· 单份报告生成 &lt; 60s（含大模型生成 + PDF 转换）</text>
+  <text class="cs" x="56" y="494" dominant-baseline="central" fill="#444441">· 批量报告：100 份并行 &lt; 30min · PDF 导出成功率 99.5%+</text>
+  <text class="cs" x="56" y="510" dominant-baseline="central" fill="#444441">· ISO 14067 / GBT 格式覆盖率 95%+ · 支持历史版本对比与审计</text>
+</svg>

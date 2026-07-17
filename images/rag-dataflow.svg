@@ -1,0 +1,91 @@
+<svg viewBox="0 0 680 520" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="RAG核心数据流图">
+  <title>RAG核心数据流</title>
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .h{font:500 13px sans-serif}
+      .ct{font:500 12px sans-serif}
+      .cs{font:400 11px sans-serif}
+      .cap{font:400 11px sans-serif;fill:#888780}
+      .stag{font:500 11px sans-serif;fill:#888780}
+    </style>
+  </defs>
+  <rect width="680" height="520" fill="#ffffff"/>
+  <text x="340" y="28" text-anchor="middle" style="font:500 15px sans-serif;fill:#26215C">RAG 核心数据流 · 离线索引 vs 在线检索生成</text>
+
+  <text class="h" x="170" y="56" text-anchor="middle" fill="#0C447C">离线索引构建（一次性 / 定时增量）</text>
+  <text class="h" x="510" y="56" text-anchor="middle" fill="#26215C">在线检索生成（实时请求链路）</text>
+  <line x1="340" y1="68" x2="340" y2="430" stroke="#B4B2A9" stroke-width="0.5" stroke-dasharray="4 4"/>
+
+  <rect x="48" y="78" width="244" height="52" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text class="stag" x="58" y="94" dominant-baseline="central">① 文档接入</text>
+  <text class="ct" x="170" y="110" text-anchor="middle" dominant-baseline="central" fill="#0C447C">ISO/国标/CBAM/因子库</text>
+  <text class="cs" x="170" y="124" text-anchor="middle" dominant-baseline="central" fill="#185FA5">数万份专业文档 · 定时抓取</text>
+  <path d="M170 130 L170 142" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="48" y="144" width="244" height="52" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text class="stag" x="58" y="160" dominant-baseline="central">② 解析 + 语义分块</text>
+  <text class="ct" x="170" y="176" text-anchor="middle" dominant-baseline="central" fill="#0C447C">POI / PDF / OCR</text>
+  <text class="cs" x="170" y="190" text-anchor="middle" dominant-baseline="central" fill="#185FA5">按标准章节分块 · 避免语义断裂</text>
+  <path d="M170 196 L170 208" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="48" y="210" width="244" height="52" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+  <text class="stag" x="58" y="226" dominant-baseline="central">③ 向量嵌入 + 全文索引</text>
+  <text class="ct" x="170" y="242" text-anchor="middle" dominant-baseline="central" fill="#0C447C">BGE-M3 Embedding</text>
+  <text class="cs" x="170" y="256" text-anchor="middle" dominant-baseline="central" fill="#185FA5">ES IK 中文分词 · 元数据提取</text>
+  <path d="M170 262 L170 274" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="48" y="276" width="244" height="52" rx="8" fill="#B5D4F4" stroke="#185FA5" stroke-width="0.5"/>
+  <text class="stag" x="58" y="292" dominant-baseline="central">④ 写入向量库 + 全文库</text>
+  <text class="ct" x="170" y="308" text-anchor="middle" dominant-baseline="central" fill="#0C447C">Milvus Collection + ES Index</text>
+  <text class="cs" x="170" y="322" text-anchor="middle" dominant-baseline="central" fill="#0C447C">来源 / 法规编号 / 适用范围</text>
+  <path d="M170 328 L170 348" stroke="#185FA5" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="388" y="78" width="244" height="52" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="stag" x="398" y="94" dominant-baseline="central">① 用户 Query + 上下文</text>
+  <text class="ct" x="510" y="110" text-anchor="middle" dominant-baseline="central" fill="#26215C">多轮会话历史</text>
+  <text class="cs" x="510" y="124" text-anchor="middle" dominant-baseline="central" fill="#534AB7">Redis 缓存 · MySQL 持久化</text>
+  <path d="M510 130 L510 142" stroke="#534AB7" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="388" y="144" width="244" height="52" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="stag" x="398" y="160" dominant-baseline="central">② Query 改写 / 扩展</text>
+  <text class="ct" x="510" y="176" text-anchor="middle" dominant-baseline="central" fill="#26215C">HyDE / 多查询 / 分解</text>
+  <text class="cs" x="510" y="190" text-anchor="middle" dominant-baseline="central" fill="#534AB7">提升召回 · 意图识别分流</text>
+  <path d="M510 196 L510 208" stroke="#534AB7" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="388" y="210" width="244" height="52" rx="8" fill="#AFA9EC" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="stag" x="398" y="226" dominant-baseline="central">③ 混合检索</text>
+  <text class="ct" x="510" y="242" text-anchor="middle" dominant-baseline="central" fill="#26215C">Milvus ANN + ES BM25</text>
+  <text class="cs" x="510" y="256" text-anchor="middle" dominant-baseline="central" fill="#26215C">Top-20 双路召回</text>
+  <path d="M510 262 L510 274" stroke="#534AB7" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="388" y="276" width="244" height="52" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="stag" x="398" y="292" dominant-baseline="central">④ RRF 融合 + Re-ranking</text>
+  <text class="ct" x="510" y="308" text-anchor="middle" dominant-baseline="central" fill="#26215C">bge-reranker 精排</text>
+  <text class="cs" x="510" y="322" text-anchor="middle" dominant-baseline="central" fill="#534AB7">Top-20 → Top-5 · 置信度阈值</text>
+  <path d="M510 328 L510 340" stroke="#534AB7" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="388" y="342" width="244" height="52" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="stag" x="398" y="358" dominant-baseline="central">⑤ Prompt 组装 → LLM 推理</text>
+  <text class="ct" x="510" y="374" text-anchor="middle" dominant-baseline="central" fill="#26215C">检索片段 + 模板 + 历史</text>
+  <text class="cs" x="510" y="388" text-anchor="middle" dominant-baseline="central" fill="#534AB7">流式 SSE · Function Calling</text>
+  <path d="M510 394 L510 406" stroke="#534AB7" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+
+  <rect x="388" y="408" width="244" height="44" rx="8" fill="#CECBF6" stroke="#534AB7" stroke-width="0.5"/>
+  <text class="stag" x="398" y="424" dominant-baseline="central">⑥ 后处理 + 输出</text>
+  <text class="ct" x="510" y="440" text-anchor="middle" dominant-baseline="central" fill="#26215C">来源引用 · 敏感词 · 置信度</text>
+
+  <rect x="48" y="408" width="244" height="44" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+  <text class="stag" x="58" y="424" dominant-baseline="central">共享存储</text>
+  <text class="ct" x="170" y="440" text-anchor="middle" dominant-baseline="central" fill="#2C2C2A">Milvus · ES · Redis 语义缓存</text>
+
+  <path d="M292 302 L320 302 L320 430 L292 430" stroke="#185FA5" stroke-width="1.2" stroke-dasharray="3 3" fill="none" marker-end="url(#a3)"/>
+  <text class="cap" x="324" y="366" dominant-baseline="central">写入</text>
+  <path d="M388 236 L360 236 L360 430 L388 430" stroke="#534AB7" stroke-width="1.2" stroke-dasharray="3 3" fill="none" marker-end="url(#a3)"/>
+  <text class="cap" x="346" y="334" text-anchor="end" dominant-baseline="central">读取</text>
+
+  <rect x="40" y="472" width="600" height="38" rx="6" fill="none" stroke="#B4B2A9" stroke-width="0.5" stroke-dasharray="3 3"/>
+  <text class="cap" x="56" y="491" dominant-baseline="central">优化成果：检索准确率 75% → 92%（Re-ranking + 语义分块 + Prompt 约束）· API 成本 ↓60%（语义缓存 + 模型分级）</text>
+</svg>

@@ -1,0 +1,20 @@
+# 非站点源码：本地资料/备份/工具（不进仓库）
+周计划/
+*.bak*
+*.bak2
+*.bak3
+面试.md
+学习计划.md
+.workbuddy/
+
+# 依赖与构建产物
+web/node_modules/
+web/docs/.vitepress/dist/
+web/docs/.vitepress/cache/
+
+# 下面这些由 split 脚本从 面试_带追问.md 自动生成，源码分支不提交（渲染分支由 CI 生成）
+web/docs/[0-9]*-*.md
+web/docs/appendix-*.md
+
+# 由脚本从 images/ 复制的静态资源
+web/docs/public/images/*

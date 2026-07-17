@@ -1,0 +1,15 @@
+{
+  "name": "interview-notes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "split": "node scripts/split.mjs",
+    "dev": "npm run split && vitepress dev docs",
+    "build": "npm run split && vitepress build docs",
+    "preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3"
+  }
+}
