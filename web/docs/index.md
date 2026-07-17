@@ -10,7 +10,7 @@ hero:
       link: /01-java-basics
     - theme: alt
       text: GitHub
-      link: https://github.com/YOUR_GITHUB_USERNAME/interview-notes
+      link: https://github.com/zabernism/codeBase
 features:
   - title: 全覆盖
     details: 27 章，从 Java 基础到 LLMOps、多模态与 AI 安全

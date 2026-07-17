@@ -49,7 +49,7 @@ export default defineConfig({
     nav: [
       { text: '首页', link: '/' },
       { text: '第一章', link: '/01-java-basics' },
-      { text: 'GitHub', link: `https://github.com/${ghUser}/interview-notes` },
+      { text: 'GitHub', link: `https://github.com/${ghUser}/codeBase` },
     ],
     sidebar: [
       {
@@ -61,7 +61,7 @@ export default defineConfig({
       provider: 'local',
     },
     socialLinks: [
-      { icon: 'github', link: `https://github.com/${ghUser}/interview-notes` },
+      { icon: 'github', link: `https://github.com/${ghUser}/codeBase` },
     ],
     outline: { level: [2, 3], label: '本页目录' },
     docFooter: { prev: true, next: true },
