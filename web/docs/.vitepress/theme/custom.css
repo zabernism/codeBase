@@ -230,6 +230,65 @@
   color: var(--vp-c-text-2);
 }
 
+/* 首页"继续阅读"进度记忆横幅 */
+
+.continue-bar {
+  max-width: 1152px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: var(--vp-c-brand-soft);
+  border: 1px solid var(--vp-c-brand-1);
+}
+
+.continue-info {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.continue-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  white-space: nowrap;
+}
+
+.continue-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.continue-title:hover {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+}
+
+.continue-close {
+  border: none;
+  background: transparent;
+  color: var(--vp-c-text-2);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  flex: 0 0 auto;
+}
+
+.continue-close:hover {
+  color: var(--vp-c-brand-1);
+}
+
 /* 平板与手机端适配 */
 
 @media (max-width: 768px) {
