@@ -18,11 +18,11 @@ export const categories = [
   },
   {
     name: 'Java 后端',
-    slugs: ['01-java-basics', '11-spring-ecosystem', '12-spring-cloud', '15-concurrency-juc'],
+    slugs: ['01-java-basics', '11-spring-ecosystem', '12-spring-cloud', '15-concurrency-juc', '33-jvm-gc', '34-algorithm-ds', '36-security'],
   },
   {
     name: '数据与中间件',
-    slugs: ['13-mysql', '14-redis', '16-mq'],
+    slugs: ['13-mysql', '14-redis', '16-mq', '35-elasticsearch', '37-distributed-tx'],
   },
   {
     name: '系统与网络',
@@ -35,6 +35,17 @@ export const categories = [
   {
     name: '系统设计',
     slugs: ['17-system-design', '18-design-patterns'],
+  },
+  {
+    name: '绿色低碳',
+    slugs: [
+      '27-carbon-accounting',
+      '28-esg-disclosure',
+      '29-carbon-policy-market',
+      '30-carbon-data-platform',
+      '31-carbon-java-composite',
+      '32-carbon-compliance-audit',
+    ],
   },
   {
     name: '附录',
