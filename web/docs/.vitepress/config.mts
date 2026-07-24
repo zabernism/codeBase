@@ -30,6 +30,17 @@ const chapters = [
   { text: '第二十四章：LLMOps与AI工程化运维', link: '/24-llmops' },
   { text: '第二十五章：多模态AI与AI安全', link: '/25-multimodal-security' },
   { text: '第二十六章：模型训练微调与评估', link: '/26-training-finetune' },
+  { text: '二十七、碳足迹核算', link: '/27-carbon-accounting' },
+  { text: '二十八、ESG披露体系', link: '/28-esg-disclosure' },
+  { text: '二十九、碳中和政策与碳市场', link: '/29-carbon-policy-market' },
+  { text: '三十、碳数据平台工程化', link: '/30-carbon-data-platform' },
+  { text: '三十一、双碳业务×Java复合题', link: '/31-carbon-java-composite' },
+  { text: '三十二、碳核算合规与审计', link: '/32-carbon-compliance-audit' },
+  { text: '三十三、JVM与GC深度调优', link: '/33-jvm-gc' },
+  { text: '三十四、算法与数据结构', link: '/34-algorithm-ds' },
+  { text: '三十五、Elasticsearch与搜索工程', link: '/35-elasticsearch' },
+  { text: '三十六、通用安全：认证授权', link: '/36-security' },
+  { text: '三十七、分布式事务深化', link: '/37-distributed-tx' },
   { text: '附录：面试高频开放题参考回答', link: '/appendix-open-questions' },
 ]
 
@@ -76,7 +87,7 @@ export default defineConfig({
     ],
     sidebar: [
       {
-        text: '面试题库（27章）',
+        text: '面试题库（38章）',
         items: chapters,
       },
     ],

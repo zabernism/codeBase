@@ -43,7 +43,8 @@ const groupedQuestions = computed(() => {
 })
 
 function chapterUrl(q) {
-  return `${baseUrl}${q.slug}#${q.anchor}`
+  // 站点未开启 cleanUrls，静态托管下内部链接需带 .html 后缀，否则跳 404
+  return `${baseUrl}${q.slug}.html#${q.anchor}`
 }
 </script>
 
