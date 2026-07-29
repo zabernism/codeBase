@@ -171,6 +171,17 @@ for (let i = 0; i < chapters.length; i++) {
       return escapeHtmlLikeTags(`${line} {#f-${i + 1}-${fIdx}}`)
     }
 
+    // 五位一体：把 **难度**：… 这类行转成结构化标签，便于杂志风排版。
+    // 仅匹配 难度/考点/参考答案/深度解析/易错点 五种；正文保留行内 markdown（反引号代码等）。
+    const five = line.match(/^\*\*(难度|考点|参考答案|深度解析|易错点)\*\*[:：]\s?(.*)$/)
+    if (five) {
+      const label = five[1]
+      const bodyText = five[2]
+      const safe = escapeHtmlLikeTags(bodyText)
+      // 标签设为 block，正文自然落到下一行；span 内的 label 不再带冒号
+      return `<span class="five-label">${label}</span>\n${safe}`
+    }
+
     return escapeHtmlLikeTags(line)
   })
 

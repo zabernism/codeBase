@@ -1,13 +1,121 @@
-/* 全局品牌色（VitePress 主题色变量） */
+/* ===== 杂志风（skin C）全局变量覆盖 ===== */
 
 :root {
-  --vp-c-brand-1: #3451b2;
-  --vp-c-brand-2: #4b66d8;
-  --vp-c-brand-3: #5672e4;
-  --vp-c-brand-soft: rgba(84, 114, 228, 0.14);
+  /* 暖色纸面 */
+  --vp-c-bg: #fcfbf8;
+  --vp-c-bg-soft: #f5f2ea;
+  --vp-c-bg-alt: #f5f2ea;
+  --vp-c-bg-mute: #efe9dc;
+  --vp-c-divider: #e7e2d8;
+  --vp-c-divider-light: #efe9dc;
+
+  /* 暖色近黑正文 */
+  --vp-c-text-1: #211d18;
+  --vp-c-text-2: #6b6358;
+  --vp-c-text-3: #8a8073;
+
+  /* 品牌色：暖墨棕（结构/链接/强调） */
+  --vp-c-brand-1: #4a3f2f;
+  --vp-c-brand-2: #5c4e3a;
+  --vp-c-brand-3: #6e5d45;
+  --vp-c-brand-soft: rgba(74, 63, 47, 0.12);
+
+  /* 代码：暖色暗框 + Java 风格着色（github-dark 主题） */
+  --vp-code-bg: #efe9dc;
+  --vp-code-color: #7a5b2e;
+  --vp-code-block-bg: #0d1117;
+  --vp-code-line-highlight-color: rgba(255, 255, 255, 0.07);
+  --vp-code-line-number-color: #6e7681;
+  --vp-code-copy-code-color: #adbac7;
+  --vp-code-copy-code-hover-color: #ffffff;
+  --vp-code-copy-copied-text-color: #7ee787;
 }
 
-/* 首页 Hero */
+/* ===== 文档正文：窄阅读栏 + 衬线大标题 ===== */
+
+.vp-doc {
+  max-width: 760px;
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: Georgia, "Songti SC", "Noto Serif SC", "PingFang SC", serif;
+  letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-top: 0.2em;
+}
+
+.vp-doc h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  border: none;
+  padding-top: 1.6em;
+}
+
+.vp-doc h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* 五位一体：标签做成杂志式小字大写，正文自然落到下一行 */
+.vp-doc .five-label {
+  display: block;
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+  margin: 20px 0 6px;
+}
+
+/* 行内代码：暖米底色，呼应代码框 */
+.vp-doc :not(pre) > code {
+  background: var(--vp-code-bg);
+  color: var(--vp-code-color);
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 0.88em;
+  font-weight: 500;
+}
+
+/* 代码块：暖色暗框 */
+.vp-doc div[class*="language-"] {
+  border-radius: 8px;
+  margin: 22px 0;
+  background: var(--vp-code-block-bg);
+}
+
+.vp-doc div[class*="language-"] pre.shiki {
+  background: transparent !important;
+  margin: 0;
+}
+
+/* 追问标题（h5）：仅用于「追问N」，醒目左条 */
+.vp-doc h5 {
+  margin-top: 1.4em;
+  margin-bottom: 0.6em;
+  padding-left: 12px;
+  border-left: 3px solid var(--vp-c-brand-1);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc h5 + p {
+  margin-top: 0.4em;
+}
+
+/* ===== 首页 Hero ===== */
 
 .VPHero {
   padding: 64px 0 48px !important;
@@ -17,6 +125,7 @@
   font-size: clamp(2.5rem, 5.5vw, 4.5rem);
   line-height: 1.2;
   letter-spacing: -0.04em;
+  font-family: Georgia, "Songti SC", "Noto Serif SC", "PingFang SC", serif;
   margin: 0 0 0.35em;
 }
 
@@ -54,10 +163,10 @@
 
 .VPHero .action .VPButton:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(52, 81, 178, 0.22);
+  box-shadow: 0 8px 24px rgba(74, 63, 47, 0.22);
 }
 
-/* 首页特性卡片改为分类入口 */
+/* ===== 首页特性卡片（分类入口） ===== */
 
 .VPFeatures {
   padding-top: 24px;
@@ -95,7 +204,7 @@
   line-height: 1.5;
 }
 
-/* 刷题页 */
+/* ===== 刷题页 ===== */
 
 .practice-page {
   max-width: 1200px;
@@ -230,7 +339,7 @@
   color: var(--vp-c-text-2);
 }
 
-/* 首页"继续阅读"进度记忆横幅 */
+/* ===== 首页「继续阅读」进度记忆横幅 ===== */
 
 .continue-bar {
   max-width: 1152px;
@@ -289,7 +398,7 @@
   color: var(--vp-c-brand-1);
 }
 
-/* 平板与手机端适配 */
+/* ===== 响应式 ===== */
 
 @media (max-width: 768px) {
   .VPHero {
@@ -358,9 +467,16 @@
   .question-link {
     font-size: 0.92rem;
   }
-}
 
-/* 小屏手机额外收紧 */
+  .vp-doc {
+    font-size: 15.5px;
+    line-height: 1.8;
+  }
+
+  .vp-doc .five-label {
+    margin: 16px 0 5px;
+  }
+}
 
 @media (max-width: 480px) {
   .VPHero {
@@ -389,29 +505,5 @@
 
   .practice-desc {
     font-size: 0.95rem;
-  }
-}
-
-/* 追问标题（h5）：文档中 h5 仅用于"追问N"，做成醒目的标题块 */
-
-.vp-doc h5 {
-  margin-top: 1.4em;
-  margin-bottom: 0.6em;
-  padding-left: 12px;
-  border-left: 3px solid var(--vp-c-brand-1);
-  font-size: 1.02rem;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--vp-c-brand-1);
-}
-
-.vp-doc h5 + p {
-  margin-top: 0.4em;
-}
-
-@media (max-width: 768px) {
-  .vp-doc h5 {
-    font-size: 0.98rem;
-    padding-left: 10px;
   }
 }

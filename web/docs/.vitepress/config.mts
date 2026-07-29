@@ -67,10 +67,15 @@ export default defineConfig({
   base,
   ignoreDeadLinks: true,
   lang: 'zh-CN',
+  // 锁定亮色：杂志风（暖色纸面）为明色设计，关闭暗色切换避免与暖色变量冲突
+  appearance: false,
   markdown: {
     // 允许在 Markdown 中使用 Vue 组件（如 <PracticePage />）。
     // 源文档中的 List<Message> 等尖括号文本已在 split.mjs 中做安全转义。
     html: true,
+    // 代码高亮主题：github-dark 提供 Java 风格着色（关键字/字符串/类型分色），
+    // 配合 custom.css 的暖色暗代码框呈现。
+    theme: 'github-dark',
   },
   title: '面试通关手册 · AI + Java 后端',
   description: 'AI + Java 后端面试全覆盖：Java/并发/Spring/AI/RAG/Agent/云原生/系统设计，含追问与碳管理业务场景',
