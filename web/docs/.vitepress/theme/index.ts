@@ -2,6 +2,7 @@ import DefaultTheme from 'vitepress/theme'
 import { h } from 'vue'
 import PracticePage from '../components/PracticePage.vue'
 import ContinueReading from '../components/ContinueReading.vue'
+import ThemeSwitcher from './ThemeSwitcher.vue'
 import './custom.css'
 
 const KEY = 'interview-last-read'
@@ -62,6 +63,8 @@ export default {
   Layout: () => {
     return h(DefaultTheme.Layout, null, {
       'home-features-before': () => h(ContinueReading),
+      'nav-bar-content-after': () => h(ThemeSwitcher),
+      'nav-screen-content-after': () => h(ThemeSwitcher),
     })
   },
 }
