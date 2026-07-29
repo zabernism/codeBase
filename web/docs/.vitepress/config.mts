@@ -1,48 +1,14 @@
 import { defineConfig } from 'vitepress'
 import { categories } from '../../scripts/categories.mjs'
+// 目录（侧边栏/导航）由 split.mjs 从 面试_带追问.md 自动生成，作为唯一真相源，
+// 不再手写章节表，避免与 md 脱节导致 404/点不动。
+import chaptersManifest from '../data/chapters.json'
 
 const ghUser = 'zabernism'
 
-const chapters = [
-  { text: '一、Java基础与分布式系统', link: '/01-java-basics' },
-  { text: '二、AI模型集成与推理', link: '/02-ai-model-integration' },
-  { text: '三、RAG（检索增强生成）', link: '/03-rag' },
-  { text: '四、Spring AI框架', link: '/04-spring-ai' },
-  { text: '五、LangChain4j框架', link: '/05-langchain4j' },
-  { text: '六、AI Agent（智能体）', link: '/06-ai-agent' },
-  { text: '七、Prompt工程', link: '/07-prompt-engineering' },
-  { text: '八、向量数据库与Embedding', link: '/08-vector-db-embedding' },
-  { text: '九、工程化与生产实践', link: '/09-engineering-production' },
-  { text: '十、大模型基础与概念', link: '/10-llm-fundamentals' },
-  { text: '第十一章 Spring全家桶深度', link: '/11-spring-ecosystem' },
-  { text: '第十二章 Spring Cloud微服务体系', link: '/12-spring-cloud' },
-  { text: '第十三章：MySQL数据库深度', link: '/13-mysql' },
-  { text: '第十四章：Redis深度', link: '/14-redis' },
-  { text: '第十五章：Java并发编程与JUC', link: '/15-concurrency-juc' },
-  { text: '第十六章：消息队列深度', link: '/16-mq' },
-  { text: '第十七章：系统设计', link: '/17-system-design' },
-  { text: '第十八章：设计模式', link: '/18-design-patterns' },
-  { text: '第十九章：Docker与Kubernetes深度', link: '/19-k8s' },
-  { text: '第二十章：CI/CD与DevOps', link: '/20-cicd' },
-  { text: '第二十一章：计算机网络', link: '/21-network' },
-  { text: '第二十二章：操作系统', link: '/22-os' },
-  { text: '第二十三章：MCP协议与AI工具集成', link: '/23-mcp' },
-  { text: '第二十四章：LLMOps与AI工程化运维', link: '/24-llmops' },
-  { text: '第二十五章：多模态AI与AI安全', link: '/25-multimodal-security' },
-  { text: '第二十六章：模型训练微调与评估', link: '/26-training-finetune' },
-  { text: '二十七、碳足迹核算', link: '/27-carbon-accounting' },
-  { text: '二十八、ESG披露体系', link: '/28-esg-disclosure' },
-  { text: '二十九、碳中和政策与碳市场', link: '/29-carbon-policy-market' },
-  { text: '三十、碳数据平台工程化', link: '/30-carbon-data-platform' },
-  { text: '三十一、双碳业务×Java复合题', link: '/31-carbon-java-composite' },
-  { text: '三十二、碳核算合规与审计', link: '/32-carbon-compliance-audit' },
-  { text: '三十三、JVM与GC深度调优', link: '/33-jvm-gc' },
-  { text: '三十四、算法与数据结构', link: '/34-algorithm-ds' },
-  { text: '三十五、Elasticsearch与搜索工程', link: '/35-elasticsearch' },
-  { text: '三十六、通用安全：认证授权', link: '/36-security' },
-  { text: '三十七、分布式事务深化', link: '/37-distributed-tx' },
-  { text: '附录：面试高频开放题参考回答', link: '/appendix-open-questions' },
-]
+// 由 split.mjs 生成的章节清单驱动侧边栏/导航：md 的 ## 章节标题即目录唯一真相源，
+// 不再手写 38 条硬编码章节表，避免与 md 脱节导致整组章节消失或 404。
+const chapters = chaptersManifest.map(c => ({ text: c.text, link: `/${c.slug}` }))
 
 const slugMap = new Map(chapters.map(c => [c.link.slice(1), c]))
 
@@ -92,7 +58,7 @@ export default defineConfig({
     ],
     sidebar: [
       {
-        text: '面试题库（38章）',
+        text: `面试题库（${chapters.length}章）`,
         items: chapters,
       },
     ],

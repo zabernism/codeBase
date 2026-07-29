@@ -11,45 +11,47 @@ const dataDir = join(docsDir, 'data')
 const publicDir = join(docsDir, 'public')
 const publicImg = join(publicDir, 'images')
 
-const slugMap = [
-  ['一、Java基础与分布式系统（AI场景下）', '01-java-basics'],
-  ['二、AI模型集成与推理', '02-ai-model-integration'],
-  ['三、RAG（检索增强生成）', '03-rag'],
-  ['四、Spring AI框架', '04-spring-ai'],
-  ['五、LangChain4j框架', '05-langchain4j'],
-  ['六、AI Agent（智能体）', '06-ai-agent'],
-  ['七、Prompt工程', '07-prompt-engineering'],
-  ['八、向量数据库与Embedding', '08-vector-db-embedding'],
-  ['九、工程化与生产实践', '09-engineering-production'],
-  ['十、大模型基础与概念', '10-llm-fundamentals'],
-  ['第十一章 Spring全家桶深度', '11-spring-ecosystem'],
-  ['第十二章 Spring Cloud微服务体系', '12-spring-cloud'],
-  ['第十三章：MySQL数据库深度（50题）', '13-mysql'],
-  ['第十四章：Redis深度（40题）', '14-redis'],
-  ['第十五章：Java并发编程与JUC（40题）', '15-concurrency-juc'],
-  ['第十六章：消息队列深度（30题）', '16-mq'],
-  ['第十七章：系统设计 —— 29道项目设计题', '17-system-design'],
-  ['第十八章：设计模式（30题）', '18-design-patterns'],
-  ['第十九章：Docker与Kubernetes深度（30题）', '19-k8s'],
-  ['第二十章：CI/CD与DevOps（28题）', '20-cicd'],
-  ['第二十一章：计算机网络', '21-network'],
-  ['第二十二章：操作系统', '22-os'],
-  ['第二十三章：MCP协议与AI工具集成', '23-mcp'],
-  ['第二十四章：LLMOps与AI工程化运维', '24-llmops'],
-  ['第二十五章：多模态AI与AI安全', '25-multimodal-security'],
-  ['第二十六章：模型训练微调与评估', '26-training-finetune'],
-  ['二十七、碳足迹核算（GHG Protocol / ISO 14067 / LCA）', '27-carbon-accounting'],
-  ['二十八、ESG 披露体系（GRI / SASB / ISSB / TCFD）', '28-esg-disclosure'],
-  ['二十九、碳中和政策与碳市场（双碳 / CEA / CCER / CBAM）', '29-carbon-policy-market'],
-  ['三十、碳数据平台工程化（高并发采集 / 批处理 / CDC）', '30-carbon-data-platform'],
-  ['三十一、双碳业务 × Java 复合题', '31-carbon-java-composite'],
-  ['三十二、碳核算合规与审计', '32-carbon-compliance-audit'],
-  ['三十三、JVM 与 GC 深度调优', '33-jvm-gc'],
-  ['三十四、算法与数据结构 / 编码题', '34-algorithm-ds'],
-  ['三十五、Elasticsearch 与搜索工程', '35-elasticsearch'],
-  ['三十六、通用安全：认证授权与 Spring Security', '36-security'],
-  ['三十七、分布式事务深化：Seata/TCC/Saga 边界与实战', '37-distributed-tx'],
-  ['附录：面试高频开放题参考回答', 'appendix-open-questions'],
+// 每个章节的固定 slug（顺序必须与 面试_带追问.md 的 ## 章节顺序一致）。
+// 章节标题本身由 md 解析得到（见下方 chapters），这里只保留 slug 这一稳定标识。
+const slugs = [
+  '01-java-basics',
+  '02-ai-model-integration',
+  '03-rag',
+  '04-spring-ai',
+  '05-langchain4j',
+  '06-ai-agent',
+  '07-prompt-engineering',
+  '08-vector-db-embedding',
+  '09-engineering-production',
+  '10-llm-fundamentals',
+  '11-spring-ecosystem',
+  '12-spring-cloud',
+  '13-mysql',
+  '14-redis',
+  '15-concurrency-juc',
+  '16-mq',
+  '17-system-design',
+  '18-design-patterns',
+  '19-k8s',
+  '20-cicd',
+  '21-network',
+  '22-os',
+  '23-mcp',
+  '24-llmops',
+  '25-multimodal-security',
+  '26-training-finetune',
+  '27-carbon-accounting',
+  '28-esg-disclosure',
+  '29-carbon-policy-market',
+  '30-carbon-data-platform',
+  '31-carbon-java-composite',
+  '32-carbon-compliance-audit',
+  '33-jvm-gc',
+  '34-algorithm-ds',
+  '35-elasticsearch',
+  '36-security',
+  '37-distributed-tx',
+  'appendix-open-questions',
 ]
 
 const text = readFileSync(src, 'utf-8')
@@ -64,8 +66,8 @@ for (const line of lines) {
     cur.lines.push(line)
   }
 }
-if (chapters.length !== slugMap.length) {
-  console.error(`章节数 ${chapters.length} ≠ 期望 ${slugMap.length}`)
+if (chapters.length !== slugs.length) {
+  console.error(`章节数 ${chapters.length} ≠ 期望 ${slugs.length}`)
   process.exit(1)
 }
 
@@ -141,7 +143,7 @@ function transformFollowups(lines, chapterIdx, state) {
 const questions = []
 for (let i = 0; i < chapters.length; i++) {
   const { title, lines: body } = chapters[i]
-  const slug = slugMap[i][1]
+  const slug = slugs[i]
   const category = slugToCategory[slug] || '未分类'
 
   let qIdx = 0
@@ -204,6 +206,24 @@ writeFileSync(
   join(dataDir, 'questions.mjs'),
   `export default ${JSON.stringify(dataPayload, null, 2)}\n`
 )
+
+// 由 md 的 ## 章节标题生成目录清单，作为导航/侧边栏的唯一真相源。
+// text 去掉可能不准确的题数后缀（如（50题）（29道项目设计题）），
+// 保留（AI场景下）（GHG Protocol…）等说明性括号。
+function cleanTitle(t) {
+  return t
+    .replace(/（[^）]*\d+\s*[题道][^）]*）/g, '')
+    .replace(/\s*[—–-]\s*$/u, '')
+    .trim()
+}
+
+const chaptersManifest = chapters.map((c, i) => ({
+  index: i + 1,
+  slug: slugs[i],
+  title: c.title,           // md 原始标题
+  text: cleanTitle(c.title), // 侧边栏/导航展示标题
+}))
+writeFileSync(join(dataDir, 'chapters.json'), JSON.stringify(chaptersManifest, null, 2))
 
 const imgSrc = join(root, 'images')
 if (existsSync(imgSrc)) {
