@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, provide } from 'vue'
 import rawData from '../../data/questions.mjs'
 import MindMapNode, { type MindNode } from './MindMapNode.vue'
 
@@ -62,6 +62,21 @@ const styleOptions: { key: MMStyle; label: string }[] = [
   { key: 'tree', label: '树状' },
   { key: 'indent', label: '缩进' },
 ]
+
+// 一键展开全部 / 折叠全部：provide 一个展开信号，子树 inject 后层层响应。
+// expandState 为 null 表示「不强制」，跟随用户手动操作；点击按钮置 true/false
+// 并递增 expandVersion 触发所有已挂载节点的 watch。
+const expandVersion = ref(0)
+const expandState = ref<boolean | null>(null)
+provide('mm-expand', { expandVersion, expandState })
+function expandAll() {
+  expandState.value = true
+  expandVersion.value++
+}
+function collapseAll() {
+  expandState.value = false
+  expandVersion.value++
+}
 </script>
 
 <template>
@@ -73,15 +88,21 @@ const styleOptions: { key: MMStyle; label: string }[] = [
           默认折叠。展开「分类 → 章节 → 题目」即可看到追问，点击任意节点直达对应内容。
         </p>
       </div>
-      <div class="mm-style-switch" role="group" aria-label="脑图样式">
-        <button
-          v-for="opt in styleOptions"
-          :key="opt.key"
-          type="button"
-          class="mm-style-btn"
-          :class="{ active: styleMode === opt.key }"
-          @click="setStyle(opt.key)"
-        >{{ opt.label }}</button>
+      <div class="mm-head-tools">
+        <div class="mm-actions">
+          <button class="mm-act-btn" type="button" @click="expandAll">展开全部</button>
+          <button class="mm-act-btn" type="button" @click="collapseAll">折叠全部</button>
+        </div>
+        <div class="mm-style-switch" role="group" aria-label="脑图样式">
+          <button
+            v-for="opt in styleOptions"
+            :key="opt.key"
+            type="button"
+            class="mm-style-btn"
+            :class="{ active: styleMode === opt.key }"
+            @click="setStyle(opt.key)"
+          >{{ opt.label }}</button>
+        </div>
       </div>
     </div>
 
