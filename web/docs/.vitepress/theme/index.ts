@@ -3,6 +3,7 @@ import { h } from 'vue'
 import PracticePage from '../components/PracticePage.vue'
 import ContinueReading from '../components/ContinueReading.vue'
 import ThemeSwitcher from './ThemeSwitcher.vue'
+import MindMap from '../components/MindMap.vue'
 import './custom.css'
 
 const KEY = 'interview-last-read'
@@ -12,6 +13,7 @@ export default {
   enhanceApp({ app, router }) {
     app.component('PracticePage', PracticePage)
     app.component('ContinueReading', ContinueReading)
+    app.component('MindMap', MindMap)
 
     // 阅读进度记忆：记录最后阅读的非首页章节 + 每个章节内的滚动位置
     // 注意：VitePress 1.x 自带轻量路由（createRouter），并非 vue-router，
@@ -63,6 +65,7 @@ export default {
   Layout: () => {
     return h(DefaultTheme.Layout, null, {
       'home-features-before': () => h(ContinueReading),
+      'home-features-after': () => h(MindMap),
       'nav-bar-content-after': () => h(ThemeSwitcher),
       'nav-screen-content-after': () => h(ThemeSwitcher),
     })

@@ -728,3 +728,118 @@ html[data-theme='mint'] {
     border-color: var(--vp-c-brand-1);
   }
 }
+
+/* ===== 首页面试题脑图（折叠树） ===== */
+
+.mindmap-section {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 56px 32px 24px;
+}
+
+.mindmap-heading {
+  font-family: Georgia, "Songti SC", "Noto Serif SC", "PingFang SC", serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--vp-c-text-1);
+  margin: 0 0 6px;
+}
+
+.mindmap-sub {
+  color: var(--vp-c-text-2);
+  font-size: 0.95rem;
+  margin: 0 0 20px;
+}
+
+.mindmap {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  background: var(--vp-c-bg-soft);
+  padding: 18px 20px;
+}
+
+.mm-node {
+  line-height: 1.5;
+}
+
+/* 分支（可折叠） */
+.mm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--vp-c-text-1);
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.98rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.mm-toggle:hover {
+  background: var(--vp-c-bg-mute);
+}
+
+.mm-caret {
+  display: inline-block;
+  width: 14px;
+  color: var(--vp-c-text-3);
+  font-size: 0.8rem;
+  flex: 0 0 auto;
+}
+
+.mm-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mm-count {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+}
+
+/* 子节点容器：左侧引导线 */
+.mm-children {
+  margin-left: 11px;
+  padding-left: 14px;
+  border-left: 1px solid var(--vp-c-divider);
+}
+
+/* 叶子（题目链接） */
+.mm-link {
+  display: block;
+  margin: 1px 0;
+  padding: 5px 8px 5px 30px;
+  border-radius: 6px;
+  color: var(--vp-c-text-1);
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-link:hover {
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+}
+
+@media (max-width: 768px) {
+  .mindmap-section {
+    padding: 40px 20px 16px;
+  }
+  .mindmap {
+    padding: 14px 14px;
+  }
+}
