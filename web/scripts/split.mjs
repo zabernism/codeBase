@@ -140,7 +140,58 @@ function transformFollowups(lines, chapterIdx, state) {
   return out
 }
 
+// 解析某章的「追问」块，把每个追问问题捕获为数据，挂到它所属的题目下。
+// 源文档存在两种追问格式，锚点必须和站点渲染严格一致：
+//   格式A：#### 追问 N：<问题>（直接 h4 标题，答案用缩进2的 - **答**： 列表）→ 锚点 f-章节-fIdx（fIdx=全章 #### 计数）
+//   格式B：#### 追问：（仅冒号）→ 其后缩进0的 - 追问N：<问题> 列表 → 锚点 fu-章节-fuIdx
+// 计数规则与 transformFollowups / 主 map 的 #### 处理完全对齐，保证跳转锚点正确。
+// 返回 { [题号qIdx]: [{ anchor, title }] }，题号为该章内 ### 题序。
+function extractFollowups(bodyLines, chapterIdx) {
+  const map = {}
+  let inCode = false
+  let qIdx = 0
+  let fIdx = 0 // 镜像主 map：每个 #### 标题都 +1（含非追问）
+  let fuIdx = 0 // 镜像 transformFollowups：格式B 顶层列表项计数
+  let inFollowupB = false // 格式B（#### 追问：）列表模式
+  for (const line of bodyLines) {
+    if (/^```/.test(line)) { inCode = !inCode; continue }
+    if (inCode) continue
+
+    if (/^## /.test(line)) { inFollowupB = false; continue }
+    if (/^### /.test(line)) { qIdx++; inFollowupB = false; continue }
+
+    if (/^#### /.test(line)) {
+      fIdx++
+      inFollowupB = false
+      const isColonOnly = /^####\s*追问\s*[:：]\s*$/.test(line)
+      if (isColonOnly) {
+        inFollowupB = true // 进入格式B列表模式
+      } else if (/^####\s*追问/.test(line)) {
+        // 格式A：标题本身就是追问问题
+        const m = line.match(/^####\s*追问\s*(.*)$/)
+        const title = (m ? m[1] : '').trim()
+        if (title) {
+          if (!map[qIdx]) map[qIdx] = []
+          map[qIdx].push({ anchor: `f-${chapterIdx}-${fIdx}`, title: `追问 ${title}` })
+        }
+      }
+      continue
+    }
+
+    if (inFollowupB) {
+      const m = line.match(/^(\s*)- (.+)$/)
+      if (m && m[1].length === 0) {
+        fuIdx++
+        if (!map[qIdx]) map[qIdx] = []
+        map[qIdx].push({ anchor: `fu-${chapterIdx}-${fuIdx}`, title: m[2].trim() })
+      }
+    }
+  }
+  return map
+}
+
 const questions = []
+const chapterFollowups = {}
 for (let i = 0; i < chapters.length; i++) {
   const { title, lines: body } = chapters[i]
   const slug = slugs[i]
@@ -188,10 +239,24 @@ for (let i = 0; i < chapters.length; i++) {
   })
 
   const transformed = transformFollowups(modified, i + 1, { fuIdx: 0 })
+  chapterFollowups[i + 1] = extractFollowups(body, i + 1)
   let content = transformed.join('\n')
   content = content.replace(/\]\((\.\/)?images\//g, '](/images/')
   const out = `---\ntitle: ${title}\n---\n\n# ${title}\n\n${content}\n`
   writeFileSync(join(docsDir, `${slug}.md`), out)
+}
+
+// 把追问挂到对应题目下（按锚点 q-章节-题序 反查）。
+for (const q of questions) {
+  const m = q.anchor.match(/^q-(\d+)-(\d+)$/)
+  if (m) {
+    const ci = Number(m[1])
+    const qi = Number(m[2])
+    const fm = chapterFollowups[ci]?.[qi]
+    if (fm && fm.length) {
+      q.followups = fm.map(f => ({ anchor: f.anchor, title: f.title }))
+    }
+  }
 }
 
 const categoryMeta = categories.map(c => ({

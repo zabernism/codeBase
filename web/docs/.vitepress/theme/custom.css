@@ -729,12 +729,21 @@ html[data-theme='mint'] {
   }
 }
 
-/* ===== 首页面试题脑图（折叠树） ===== */
+/* ===== 首页面试题脑图（可切换 树状 / 缩进） ===== */
 
 .mindmap-section {
   max-width: 1152px;
   margin: 0 auto;
   padding: 56px 32px 24px;
+}
+
+.mindmap-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
 }
 
 .mindmap-heading {
@@ -749,7 +758,34 @@ html[data-theme='mint'] {
 .mindmap-sub {
   color: var(--vp-c-text-2);
   font-size: 0.95rem;
-  margin: 0 0 20px;
+  margin: 0;
+}
+
+/* 脑图样式切换器（树状 / 缩进） */
+.mm-style-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  background: var(--vp-c-bg-soft);
+  padding: 3px;
+  gap: 2px;
+}
+.mm-style-btn {
+  border: none;
+  background: transparent;
+  color: var(--vp-c-text-2);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.mm-style-btn:hover { color: var(--vp-c-text-1); }
+.mm-style-btn.active {
+  background: var(--vp-c-brand-1);
+  color: #fff;
 }
 
 .mindmap {
@@ -759,43 +795,50 @@ html[data-theme='mint'] {
   padding: 18px 20px;
 }
 
-.mm-node {
-  line-height: 1.5;
-}
+.mm-node { line-height: 1.5; }
 
-/* 分支（可折叠） */
-.mm-toggle {
+.mm-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
-  color: var(--vp-c-text-1);
-  padding: 6px 8px;
+  padding: 4px 6px;
   border-radius: 8px;
-  font-size: 0.98rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.mm-toggle:hover {
-  background: var(--vp-c-bg-mute);
+  min-height: 30px;
 }
 
 .mm-caret {
-  display: inline-block;
-  width: 14px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
   color: var(--vp-c-text-3);
   font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.mm-caret:hover { background: var(--vp-c-bg-mute); color: var(--vp-c-text-1); }
+
+.mm-dot {
   flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin: 0 7px;
+  border-radius: 50%;
+  background: var(--vp-c-text-3);
+  opacity: 0.6;
 }
 
 .mm-label {
   flex: 1 1 auto;
   min-width: 0;
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+  font-size: 0.98rem;
 }
 
 .mm-count {
@@ -808,38 +851,74 @@ html[data-theme='mint'] {
   color: var(--vp-c-brand-1);
 }
 
-/* 子节点容器：左侧引导线 */
-.mm-children {
-  margin-left: 11px;
-  padding-left: 14px;
-  border-left: 1px solid var(--vp-c-divider);
-}
-
-/* 叶子（题目链接） */
 .mm-link {
-  display: block;
-  margin: 1px 0;
-  padding: 5px 8px 5px 30px;
-  border-radius: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--vp-c-text-1);
   font-size: 0.9rem;
   text-decoration: none;
-  transition: background 0.12s ease, color 0.12s ease;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border-radius: 6px;
+  padding: 2px 4px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.mm-link:hover { background: var(--vp-c-brand-soft); color: var(--vp-c-brand-1); }
+
+/* 追问子节点：淡化区分 */
+.mm-node.mm-followup > .mm-row > .mm-link {
+  font-size: 0.86rem;
+  color: var(--vp-c-text-2);
+}
+.mm-node.mm-followup > .mm-row > .mm-link:hover { color: var(--vp-c-brand-1); }
+
+/* ===== 子节点容器与树状连线 ===== */
+.mm-children { position: relative; }
+
+/* 树状：父容器左侧竖线 + 每节点横线 */
+.mindmap.style-tree .mm-children { margin-left: 10px; }
+.mindmap.style-tree .mm-children::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15px;
+  bottom: 0;
+  width: 1px;
+  background: var(--vp-c-divider);
+}
+.mindmap.style-tree .mm-children > .mm-node {
+  position: relative;
+  padding-left: 18px;
+}
+.mindmap.style-tree .mm-children > .mm-node::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 15px;
+  width: 18px;
+  height: 1px;
+  background: var(--vp-c-divider);
+}
+/* 末节点：用背景色遮住竖线尾段，避免下垂 */
+.mindmap.style-tree .mm-children > .mm-node.mm-last::after {
+  left: -1px;
+  width: 2px;
+  top: 15px;
+  bottom: 0;
+  height: auto;
+  background: var(--vp-c-bg-soft);
 }
 
-.mm-link:hover {
-  background: var(--vp-c-brand-soft);
-  color: var(--vp-c-brand-1);
-}
+/* 缩进：仅缩进，无连线 */
+.mindmap.style-indent .mm-children { margin-left: 6px; padding-left: 16px; }
+.mindmap.style-indent .mm-children::before { display: none; }
+.mindmap.style-indent .mm-children > .mm-node { padding-left: 0; }
+.mindmap.style-indent .mm-children > .mm-node::after { display: none; }
+.mindmap.style-indent .mm-children > .mm-node.mm-last::after { display: none; }
 
 @media (max-width: 768px) {
-  .mindmap-section {
-    padding: 40px 20px 16px;
-  }
-  .mindmap {
-    padding: 14px 14px;
-  }
+  .mindmap-section { padding: 40px 20px 16px; }
+  .mindmap { padding: 14px 14px; }
+  .mindmap-head { flex-direction: column; }
 }
