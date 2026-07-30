@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 interface ThemeDef {
   key: string
@@ -18,10 +18,6 @@ const STORAGE_KEY = 'interview-theme'
 const open = ref(false)
 const current = ref('magazine')
 const root = ref<HTMLElement | null>(null)
-
-const currentDef = computed(
-  () => themes.find((t) => t.key === current.value) ?? themes[0],
-)
 
 function apply(key: string) {
   current.value = key
@@ -59,11 +55,12 @@ onBeforeUnmount(() => {
     <button
       class="theme-toggle"
       type="button"
-      :title="`主题：${currentDef.label}`"
-      :aria-label="`切换主题，当前：${currentDef.label}`"
+      title="切换主题"
+      aria-label="切换主题"
       @click="open = !open"
     >
-      <span class="tt-icon">{{ currentDef.icon }}</span>
+      <span class="tt-icon">🎨</span>
+      <span class="tt-text">主题</span>
     </button>
     <transition name="theme-fade">
       <div v-if="open" class="theme-menu" role="menu">

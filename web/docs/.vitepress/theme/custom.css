@@ -607,17 +607,27 @@ html[data-theme='mint'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
+  gap: 6px;
   height: 36px;
-  padding: 0;
-  border-radius: 8px;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
   color: var(--vp-c-text-1);
-  font-size: 18px;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.theme-toggle .tt-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.theme-toggle .tt-text {
+  white-space: nowrap;
 }
 
 .theme-toggle:hover {
@@ -692,8 +702,9 @@ html[data-theme='mint'] {
     margin-left: 8px;
   }
   .theme-toggle {
-    width: 34px;
     height: 34px;
+    padding: 0 10px;
+    font-size: 13px;
   }
   /* 移动端菜单内联展开，避免浮层溢出 */
   .theme-menu {
