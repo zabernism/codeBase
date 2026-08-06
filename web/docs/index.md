@@ -3,7 +3,7 @@ layout: home
 hero:
   name: 面试通关手册
   text: AI + Java 后端
-  tagline: 1258 道面试题 · 38 章 · 覆盖 Java / 并发 / JVM / Spring / AI / RAG / Agent / 云原生 / 系统设计 / 安全 / 中间件 / 双碳（绿色低碳），结合碳管理业务场景
+  tagline: 1272 道面试题 · 39 章 · 覆盖 Java / 并发 / JVM / Spring / AI / RAG / Agent / 云原生 / 系统设计 / 安全 / 中间件 / 双碳（绿色低碳），结合碳管理业务场景
   actions:
     - theme: brand
       text: 开始刷题
@@ -30,7 +30,7 @@ features:
     link: /practice?category=%E7%B3%BB%E7%BB%9F%E4%B8%8E%E7%BD%91%E7%BB%9C
   - icon: ☁️
     title: 工程与云原生
-    details: 3 章 · 工程化 / Docker / Kubernetes / CI/CD
+    details: 4 章 · 工程化 / AI 网关 / Docker / Kubernetes / CI/CD
     link: /practice?category=%E5%B7%A5%E7%A8%8B%E4%B8%8E%E4%BA%91%E5%8E%9F%E7%94%9F
   - icon: 🏗️
     title: 系统设计

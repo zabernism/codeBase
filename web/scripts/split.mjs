@@ -51,6 +51,7 @@ const slugs = [
   '35-elasticsearch',
   '36-security',
   '37-distributed-tx',
+  '38-ai-gateway',
   'appendix-open-questions',
 ]
 

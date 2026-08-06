@@ -30,7 +30,7 @@ export const categories = [
   },
   {
     name: '工程与云原生',
-    slugs: ['09-engineering-production', '19-k8s', '20-cicd'],
+    slugs: ['09-engineering-production', '19-k8s', '20-cicd', '38-ai-gateway'],
   },
   {
     name: '系统设计',
