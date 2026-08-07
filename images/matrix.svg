@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="962" viewBox="0 0 1180 962">
+<text x="590.0" y="34" text-anchor="middle" font-size="26" font-weight="700" fill="#1f2937">Matrix（AI 自动建模/计算/填报）细化架构</text>
+<rect x="8" y="60" width="1164" height="92" rx="14" fill="#eef2ff" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">数据源</text>
+<line x1="168" y1="72" x2="168" y2="140" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="71.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="302.8" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">业务系统</text>
+<text x="302.8" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">ERP/MES/能源</text>
+<rect x="431.5" y="71.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="550.2" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">IoT 监测</text>
+<text x="550.2" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">电/气/蒸汽</text>
+<rect x="679.0" y="71.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="797.8" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">第三方 API</text>
+<text x="797.8" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">电网/供应商</text>
+<rect x="926.5" y="71.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="1045.2" y="106.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">人工录入/校验</text>
+<rect x="8" y="186" width="1164" height="92" rx="14" fill="#ede9fe" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="226.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">① 自动建模 Agent</text>
+<line x1="168" y1="198" x2="168" y2="266" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="197.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="302.8" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">场景识别</text>
+<text x="302.8" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">产品/组织碳/CBAM</text>
+<rect x="431.5" y="197.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="550.2" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">模型生成</text>
+<text x="550.2" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">核算模型+边界</text>
+<rect x="679.0" y="197.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="797.8" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">因子匹配</text>
+<text x="797.8" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">排放因子库</text>
+<rect x="926.5" y="197.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="1045.2" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">模型校验</text>
+<text x="1045.2" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">完整性/合理性</text>
+<rect x="8" y="312" width="1164" height="92" rx="14" fill="#cffafe" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="352.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">② 自动计算</text>
+<line x1="168" y1="324" x2="168" y2="392" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="323.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="344.0" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">计算编排</text>
+<text x="344.0" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">DAG 任务流</text>
+<rect x="514.0" y="323.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="674.0" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">计算引擎</text>
+<text x="674.0" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">规则+公式</text>
+<rect x="844.0" y="323.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="1004.0" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">批量计算</text>
+<text x="1004.0" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">月度/年度</text>
+<rect x="8" y="438" width="1164" height="92" rx="14" fill="#dcfce7" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="478.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">③ 自动填报</text>
+<line x1="168" y1="450" x2="168" y2="518" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="449.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="302.8" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">模板识别</text>
+<text x="302.8" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">报告/申报表</text>
+<rect x="431.5" y="449.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="550.2" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">数据映射</text>
+<text x="550.2" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">字段对齐</text>
+<rect x="679.0" y="449.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="797.8" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">报告生成</text>
+<text x="797.8" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">碳/ESG/CBAM</text>
+<rect x="926.5" y="449.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="1045.2" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">合规校验+提交</text>
+<text x="1045.2" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">监管平台</text>
+<rect x="8" y="564" width="1164" height="92" rx="14" fill="#fef3c7" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="604.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">AI 能力复用</text>
+<text x="88" y="624.0" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#64748b">↔ 横向支撑建模/计算/填报</text>
+<line x1="168" y1="576" x2="168" y2="644" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="575.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="302.8" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">LLM 网关</text>
+<text x="302.8" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">通义/DeepSeek/GLM</text>
+<rect x="431.5" y="575.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="550.2" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">向量检索</text>
+<text x="550.2" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规/因子</text>
+<rect x="679.0" y="575.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="797.8" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Agent 编排</text>
+<text x="797.8" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">LangChain4j</text>
+<rect x="926.5" y="575.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="1045.2" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">工具调用</text>
+<text x="1045.2" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Function Calling</text>
+<rect x="8" y="690" width="1164" height="92" rx="14" fill="#fee2e2" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="730.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">人机协同与治理</text>
+<text x="88" y="750.0" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#64748b">审核节点贯穿全链路</text>
+<line x1="168" y1="702" x2="168" y2="770" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="701.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#fca5a5" stroke-width="2"/>
+<text x="344.0" y="728.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">人工审核</text>
+<text x="344.0" y="745.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">低置信/异常</text>
+<rect x="514.0" y="701.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#fca5a5" stroke-width="2"/>
+<text x="674.0" y="728.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">全链路溯源</text>
+<text x="674.0" y="745.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">可审计</text>
+<rect x="844.0" y="701.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#fca5a5" stroke-width="2"/>
+<text x="1004.0" y="728.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">反馈学习</text>
+<text x="1004.0" y="745.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">模型迭代</text>
+<rect x="8" y="816" width="1164" height="92" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="856.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">输出</text>
+<line x1="168" y1="828" x2="168" y2="896" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="827.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="302.8" y="862.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">碳足迹报告</text>
+<rect x="431.5" y="827.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="550.2" y="862.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">ESG 披露</text>
+<rect x="679.0" y="827.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="797.8" y="862.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">CBAM 申报</text>
+<rect x="926.5" y="827.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1045.2" y="862.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">监管平台对接</text>
+<line x1="590" y1="158" x2="590" y2="180" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,171 595,171 590,180" fill="#94a3b8"/>
+<line x1="590" y1="284" x2="590" y2="306" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,297 595,297 590,306" fill="#94a3b8"/>
+<line x1="590" y1="410" x2="590" y2="432" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,423 595,423 590,432" fill="#94a3b8"/>
+<line x1="590" y1="536" x2="590" y2="558" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,4"/>
+<polygon points="585,549 595,549 590,558" fill="#94a3b8"/>
+<line x1="590" y1="662" x2="590" y2="684" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,4"/>
+<polygon points="585,675 595,675 590,684" fill="#94a3b8"/>
+<line x1="590" y1="788" x2="590" y2="810" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,4"/>
+<polygon points="585,801 595,801 590,810" fill="#94a3b8"/>
+</svg>

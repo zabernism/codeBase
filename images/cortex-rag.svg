@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="836" viewBox="0 0 1180 836">
+<text x="590.0" y="34" text-anchor="middle" font-size="26" font-weight="700" fill="#1f2937">Cortex（RAG 知识库）细化架构</text>
+<rect x="8" y="60" width="1164" height="92" rx="14" fill="#eef2ff" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">知识接入</text>
+<line x1="168" y1="72" x2="168" y2="140" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="344.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">文档上传</text>
+<text x="344.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Word/PDF/Excel</text>
+<rect x="514.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="674.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规订阅</text>
+<text x="674.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">双碳/CBAM/ESG</text>
+<rect x="844.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
+<text x="1004.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">第三方 API</text>
+<text x="1004.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">爬虫</text>
+<rect x="8" y="186" width="1164" height="92" rx="14" fill="#cffafe" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="226.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">文档处理管线</text>
+<line x1="168" y1="198" x2="168" y2="266" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="197.0" width="188.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="278.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">格式解析</text>
+<text x="278.0" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Apache Tika</text>
+<rect x="382.0" y="197.0" width="188.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="476.0" y="232.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">OCR 识别</text>
+<rect x="580.0" y="197.0" width="188.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="674.0" y="232.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">清洗去重</text>
+<rect x="778.0" y="197.0" width="188.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="872.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">智能分块</text>
+<text x="872.0" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">结构+语义</text>
+<rect x="976.0" y="197.0" width="188.0" height="70.0" rx="10" fill="#ffffff" stroke="#67e8f9" stroke-width="2"/>
+<text x="1070.0" y="224.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Embedding</text>
+<text x="1070.0" y="241.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">bge-m3</text>
+<rect x="8" y="312" width="1164" height="92" rx="14" fill="#dcfce7" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="352.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">索引与存储</text>
+<line x1="168" y1="324" x2="168" y2="392" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="323.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="302.8" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Milvus</text>
+<text x="302.8" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">HNSW 向量</text>
+<rect x="431.5" y="323.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="550.2" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Elasticsearch</text>
+<text x="550.2" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">BM25 全文</text>
+<rect x="679.0" y="323.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="797.8" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">对象存储</text>
+<text x="797.8" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">原文+切片</text>
+<rect x="926.5" y="323.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#86efac" stroke-width="2"/>
+<text x="1045.2" y="350.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">MySQL</text>
+<text x="1045.2" y="367.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">元数据/权限</text>
+<rect x="8" y="438" width="1164" height="92" rx="14" fill="#ede9fe" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="478.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">混合检索</text>
+<line x1="168" y1="450" x2="168" y2="518" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="449.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="344.0" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">多路召回</text>
+<text x="344.0" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">向量+BM25</text>
+<rect x="514.0" y="449.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="674.0" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">重排序</text>
+<text x="674.0" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Cross-Encoder</text>
+<rect x="844.0" y="449.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c4b5fd" stroke-width="2"/>
+<text x="1004.0" y="476.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">租户隔离</text>
+<text x="1004.0" y="493.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">tenantId</text>
+<rect x="8" y="564" width="1164" height="92" rx="14" fill="#fef3c7" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="604.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">生成层</text>
+<line x1="168" y1="576" x2="168" y2="644" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="575.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="344.0" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Prompt 编排</text>
+<text x="344.0" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">引用溯源</text>
+<rect x="514.0" y="575.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="674.0" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">LLM 调用</text>
+<text x="674.0" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">通义/DeepSeek/GLM</text>
+<rect x="844.0" y="575.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#fcd34d" stroke-width="2"/>
+<text x="1004.0" y="602.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">安全过滤</text>
+<text x="1004.0" y="619.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">防注入</text>
+<rect x="8" y="690" width="1164" height="92" rx="14" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1"/>
+<text x="88" y="730.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">服务层</text>
+<line x1="168" y1="702" x2="168" y2="770" stroke="#cbd5e1" stroke-width="1"/>
+<rect x="184.0" y="701.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="302.8" y="736.0" text-anchor="middle" dominant-baseline="central" font-size="13.5" fill="#1f2937">Cortex API</text>
+<rect x="431.5" y="701.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="550.2" y="728.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Session 管理</text>
+<text x="550.2" y="745.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Redis</text>
+<rect x="679.0" y="701.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="797.8" y="728.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">语义缓存</text>
+<text x="797.8" y="745.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Redis Vector</text>
+<rect x="926.5" y="701.0" width="237.5" height="70.0" rx="10" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1045.2" y="728.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">反馈闭环</text>
+<text x="1045.2" y="745.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">点赞/纠错</text>
+<line x1="590" y1="158" x2="590" y2="180" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,171 595,171 590,180" fill="#94a3b8"/>
+<line x1="590" y1="284" x2="590" y2="306" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,297 595,297 590,306" fill="#94a3b8"/>
+<line x1="590" y1="410" x2="590" y2="432" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,423 595,423 590,432" fill="#94a3b8"/>
+<line x1="590" y1="536" x2="590" y2="558" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,549 595,549 590,558" fill="#94a3b8"/>
+<line x1="590" y1="662" x2="590" y2="684" stroke="#94a3b8" stroke-width="2"/>
+<polygon points="585,675 595,675 590,684" fill="#94a3b8"/>
+</svg>
