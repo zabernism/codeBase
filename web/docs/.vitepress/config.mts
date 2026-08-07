@@ -42,6 +42,8 @@ export default defineConfig({
     // 代码高亮主题：github-dark 提供 Java 风格着色（关键字/字符串/类型分色），
     // 配合 custom.css 的暖色暗代码框呈现。
     theme: 'github-dark',
+    // 启用 Mermaid 架构图渲染（默认主题已提供 Mermaid 组件，开启后 ```mermaid 代码块渲染为图而非纯文本）
+    mermaid: true,
   },
   title: '面试通关手册 · AI + Java 后端',
   description: 'AI + Java 后端面试全覆盖：Java/并发/Spring/AI/RAG/Agent/云原生/系统设计，含追问与碳管理业务场景',
