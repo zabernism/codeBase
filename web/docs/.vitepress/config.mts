@@ -48,6 +48,36 @@ export default withMermaid(defineConfig({
   mermaid: {
     // 允许标签内 <br/> 换行（默认 strict 会转义 HTML 导致 <br/> 原样显示）
     securityLevel: 'loose',
+    // 用 base 主题 + 自定义变量：浅底深字，跨亮/暗主题都清晰易读
+    theme: 'base',
+    themeVariables: {
+      fontSize: '18px',
+      fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif',
+      // 节点：浅蓝灰底 + 深灰字，描边中性灰
+      primaryColor: '#eef2f7',
+      primaryTextColor: '#1f2937',
+      primaryBorderColor: '#94a3b8',
+      secondaryColor: '#f1f5f9',
+      tertiaryColor: '#f8fafc',
+      // 连线与标签
+      lineColor: '#64748b',
+      textColor: '#1f2937',
+      edgeLabelBackground: '#ffffff',
+      // subgraph 分组背景
+      clusterBkg: '#f8fafc',
+      clusterBorder: '#cbd5e1',
+      // 边/节点细节
+      nodeBorder: '#94a3b8',
+      nodeTextColor: '#1f2937',
+      classText: '#1f2937',
+    },
+    flowchart: {
+      // 节点圆角、曲线边，更现代
+      curve: 'basis',
+      padding: 24,
+      nodeSpacing: 50,
+      rankSpacing: 60,
+    },
   },
   title: '面试通关手册 · AI + Java 后端',
   description: 'AI + Java 后端面试全覆盖：Java/并发/Spring/AI/RAG/Agent/云原生/系统设计，含追问与碳管理业务场景',

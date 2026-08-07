@@ -959,3 +959,30 @@ html[data-theme='mint'] {
   .mindmap { padding: 14px 14px; }
   .mindmap-head { flex-direction: column; }
 }
+
+/* ===== Mermaid 架构图美化 =====
+   浅色卡片承载 + 放大字号 + 圆角阴影，跨亮/暗主题都保证深字清晰；
+   图过宽时横向滚动而非整体缩小，避免字被缩糊。 */
+.mermaid {
+  background: #ffffff;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  padding: 28px 24px;
+  margin: 22px 0;
+  overflow-x: auto;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+.mermaid svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+/* 暗夜主题下依旧浅底深字，确保清晰可读 */
+html[data-theme='dark'] .mermaid {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+@media (max-width: 768px) {
+  .mermaid { padding: 18px 14px; margin: 16px 0; }
+}
