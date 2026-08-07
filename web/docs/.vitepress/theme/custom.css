@@ -986,3 +986,15 @@ html[data-theme='dark'] .mermaid {
 @media (max-width: 768px) {
   .mermaid { padding: 18px 14px; margin: 16px 0; }
 }
+
+/* ===== 架构图（总体系统架构用 images/arch-overview.svg 渲染，避免字小/黏连） ===== */
+.vp-doc img[src*="arch-overview"] {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 24px auto;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 28px rgba(15, 23, 42, 0.06);
+  background: #ffffff;
+}
