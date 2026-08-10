@@ -4,6 +4,7 @@ import PracticePage from '../components/PracticePage.vue'
 import ContinueReading from '../components/ContinueReading.vue'
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import MindMap from '../components/MindMap.vue'
+import ImageZoom from '../components/ImageZoom.vue'
 import './custom.css'
 
 const KEY = 'interview-last-read'
@@ -68,6 +69,7 @@ export default {
       'home-features-after': () => h(MindMap),
       'nav-bar-content-after': () => h(ThemeSwitcher),
       'nav-screen-content-after': () => h(ThemeSwitcher),
+      'layout-bottom': () => h(ImageZoom),
     })
   },
 }
