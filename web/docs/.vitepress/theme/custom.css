@@ -1058,3 +1058,34 @@ html[data-theme='dark'] .mermaid {
   .img-zoom-overlay { padding: 14px; }
   .img-zoom-target { max-width: 100vw; max-height: 82vh; }
 }
+
+/* 架构图（固定宽 SVG）移动端：保持原始清晰度，横向滚动查看，不整体缩放糊字 */
+@media (max-width: 768px) {
+  .vp-doc p:has(> img[src*="arch-overview"]),
+  .vp-doc p:has(> img[src*="cortex-rag"]),
+  .vp-doc p:has(> img[src*="matrix"]) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+  }
+  .vp-doc img[src*="arch-overview"],
+  .vp-doc img[src*="cortex-rag"],
+  .vp-doc img[src*="matrix"] {
+    width: 1180px;
+    max-width: none;
+    height: auto;
+    margin: 18px 0;
+  }
+  /* 灯箱放大时，架构图按原始尺寸显示（遮罩内可横向滚动），不再缩糊 */
+  .img-zoom-overlay:has(.zoom-arch) {
+    display: block;
+    overflow: auto;
+    text-align: center;
+  }
+  .img-zoom-target.zoom-arch {
+    width: 1180px;
+    max-width: none;
+    max-height: none;
+    height: auto;
+  }
+}

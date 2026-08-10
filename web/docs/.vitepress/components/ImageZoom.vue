@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="open" class="img-zoom-overlay" @click="close">
-      <img class="img-zoom-target" :src="src" :alt="alt" @click.stop />
+      <img class="img-zoom-target" :class="{ 'zoom-arch': isArch }" :src="src" :alt="alt" @click.stop />
       <button class="img-zoom-close" @click.stop="close" aria-label="关闭">×</button>
       <div class="img-zoom-hint">点击空白处或按 Esc 关闭</div>
     </div>
@@ -14,6 +14,9 @@ import { onMounted, onUnmounted, ref } from 'vue'
 const open = ref(false)
 const src = ref('')
 const alt = ref('')
+const isArch = ref(false)
+
+const ARCH_RE = /arch-overview|cortex-rag|matrix/
 
 const onDocClick = (e) => {
   const target = e.target
@@ -22,6 +25,8 @@ const onDocClick = (e) => {
   if (!target.closest('.vp-doc')) return
   src.value = target.currentSrc || target.src
   alt.value = target.alt || ''
+  // 架构图（固定宽 SVG）在灯箱里按原始尺寸显示，避免被缩糊
+  isArch.value = ARCH_RE.test(src.value)
   open.value = true
   if (typeof document !== 'undefined') document.body.style.overflow = 'hidden'
 }
@@ -33,6 +38,7 @@ const onKey = (e) => {
 const close = () => {
   open.value = false
   src.value = ''
+  isArch.value = false
   if (typeof document !== 'undefined') document.body.style.overflow = ''
 }
 
