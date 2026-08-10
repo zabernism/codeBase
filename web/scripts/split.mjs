@@ -14,6 +14,7 @@ const publicImg = join(publicDir, 'images')
 // 每个章节的固定 slug（顺序必须与 面试_带追问.md 的 ## 章节顺序一致）。
 // 章节标题本身由 md 解析得到（见下方 chapters），这里只保留 slug 这一稳定标识。
 const slugs = [
+  '17-system-design',
   '01-java-basics',
   '02-ai-model-integration',
   '03-rag',
@@ -30,7 +31,6 @@ const slugs = [
   '14-redis',
   '15-concurrency-juc',
   '16-mq',
-  '17-system-design',
   '18-design-patterns',
   '19-k8s',
   '20-cicd',

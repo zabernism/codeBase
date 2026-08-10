@@ -12,6 +12,10 @@ hero:
       text: GitHub
       link: https://github.com/zabernism/codeBase
 features:
+  - icon: 🏗️
+    title: 系统设计
+    details: 2 章 · 系统设计 / 设计模式（积木LCA云平台架构总览首发）
+    link: /practice?category=%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1
   - icon: 🤖
     title: AI / 大模型
     details: 12 章 · 模型集成 / RAG / Spring AI / LangChain4j / Agent / Prompt / LLMOps / 多模态
@@ -32,10 +36,6 @@ features:
     title: 工程与云原生
     details: 4 章 · 工程化 / AI 网关 / Docker / Kubernetes / CI/CD
     link: /practice?category=%E5%B7%A5%E7%A8%8B%E4%B8%8E%E4%BA%91%E5%8E%9F%E7%94%9F
-  - icon: 🏗️
-    title: 系统设计
-    details: 2 章 · 系统设计 / 设计模式
-    link: /practice?category=%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1
   - icon: 🌱
     title: 绿色低碳
     details: 6 章 · 碳足迹核算 / ESG / 碳中和政策与碳市场 / 碳数据平台 / 双碳×Java 复合 / 合规审计

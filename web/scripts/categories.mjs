@@ -1,5 +1,9 @@
 export const categories = [
   {
+    name: '系统设计',
+    slugs: ['17-system-design', '18-design-patterns'],
+  },
+  {
     name: 'AI / 大模型',
     slugs: [
       '02-ai-model-integration',
@@ -31,10 +35,6 @@ export const categories = [
   {
     name: '工程与云原生',
     slugs: ['09-engineering-production', '19-k8s', '20-cicd', '38-ai-gateway'],
-  },
-  {
-    name: '系统设计',
-    slugs: ['17-system-design', '18-design-patterns'],
   },
   {
     name: '绿色低碳',

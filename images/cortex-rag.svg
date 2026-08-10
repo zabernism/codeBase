@@ -7,11 +7,11 @@
 <text x="344.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">文档上传</text>
 <text x="344.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Word/PDF/Excel</text>
 <rect x="514.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
-<text x="674.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规订阅</text>
-<text x="674.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">双碳/CBAM/ESG</text>
+<text x="674.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">业务员录入</text>
+<text x="674.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规·因子·工艺</text>
 <rect x="844.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
-<text x="1004.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">第三方 API</text>
-<text x="1004.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">爬虫</text>
+<text x="1004.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">内部系统对接</text>
+<text x="1004.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">ERP·因子库</text>
 <rect x="8" y="186" width="1164" height="92" rx="14" fill="#cffafe" stroke="#e2e8f0" stroke-width="1"/>
 <text x="88" y="226.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">文档处理管线</text>
 <line x1="168" y1="198" x2="168" y2="266" stroke="#cbd5e1" stroke-width="1"/>
