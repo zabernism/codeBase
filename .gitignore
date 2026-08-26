@@ -6,11 +6,14 @@
 面试.md
 学习计划.md
 .workbuddy/
+.DS_Store
+test.md
 
 # 依赖与构建产物
 web/node_modules/
 web/docs/.vitepress/dist/
 web/docs/.vitepress/cache/
+web/docs/.vitepress/*.timestamp-*
 
 # 下面这些由 split 脚本从 面试_带追问.md 自动生成，源码分支不提交（渲染分支由 CI 生成）
 web/docs/[0-9]*-*.md
