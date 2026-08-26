@@ -14,45 +14,43 @@ const publicImg = join(publicDir, 'images')
 // 每个章节的固定 slug（顺序必须与 面试_带追问.md 的 ## 章节顺序一致）。
 // 章节标题本身由 md 解析得到（见下方 chapters），这里只保留 slug 这一稳定标识。
 const slugs = [
-  '17-system-design',
-  '01-java-basics',
-  '02-ai-model-integration',
-  '03-rag',
-  '04-spring-ai',
-  '05-langchain4j',
-  '06-ai-agent',
-  '07-prompt-engineering',
-  '08-vector-db-embedding',
-  '09-engineering-production',
-  '10-llm-fundamentals',
-  '11-spring-ecosystem',
-  '12-spring-cloud',
-  '13-mysql',
-  '14-redis',
-  '15-concurrency-juc',
-  '16-mq',
-  '18-design-patterns',
-  '19-k8s',
-  '20-cicd',
-  '21-network',
-  '22-os',
-  '23-mcp',
-  '24-llmops',
-  '25-multimodal-security',
-  '26-training-finetune',
-  '27-carbon-accounting',
-  '28-esg-disclosure',
-  '29-carbon-policy-market',
-  '30-carbon-data-platform',
-  '31-carbon-java-composite',
-  '32-carbon-compliance-audit',
-  '33-jvm-gc',
-  '34-algorithm-ds',
-  '35-elasticsearch',
-  '36-security',
-  '37-distributed-tx',
-  '38-ai-gateway',
-  'appendix-open-questions',
+  '17-system-design',           // 第一章：系统设计
+  '10-llm-fundamentals',        // 第二章：大模型基础与概念
+  '02-ai-model-integration',    // 第三章：AI模型集成与推理
+  '03-rag',                     // 第四章：RAG
+  '08-vector-db-embedding',     // 第五章：向量数据库与Embedding
+  '07-prompt-engineering',      // 第六章：Prompt工程
+  '04-spring-ai',               // 第七章：Spring AI
+  '05-langchain4j',             // 第八章：LangChain4j
+  '06-ai-agent',                // 第九章：AI Agent
+  '23-mcp',                     // 第十章：MCP协议
+  '38-ai-gateway',              // 第十一章：AI网关
+  '09-engineering-production',  // 第十二章：AI工程化与LLMOps（合并原engineering+llmops）
+  '25-multimodal-security',     // 第十三章：多模态AI与AI安全
+  '26-training-finetune',       // 第十四章：模型训练微调与评估
+  '01-java-basics',             // 第十五章：Java基础与分布式系统
+  '33-jvm-gc',                  // 第十六章：JVM与GC
+  '11-spring-ecosystem',        // 第十七章：Spring全家桶
+  '12-spring-cloud',            // 第十八章：Spring Cloud
+  '13-mysql',                   // 第十九章：MySQL
+  '14-redis',                   // 第二十章：Redis
+  '15-concurrency-juc',         // 第二十一章：Java并发JUC
+  '16-mq',                      // 第二十二章：消息队列
+  '35-elasticsearch',           // 第二十三章：Elasticsearch
+  '37-distributed-tx',          // 第二十四章：分布式事务
+  '18-design-patterns',         // 第二十五章：设计模式
+  '19-k8s',                     // 第二十六章：Docker与K8s
+  '20-cicd',                    // 第二十七章：CI/CD
+  '21-network',                 // 第二十八章：计算机网络
+  '22-os',                      // 第二十九章：操作系统
+  '36-security',                // 第三十章：通用安全
+  '27-carbon-accounting',       // 第三十一章：碳足迹核算
+  '28-esg-disclosure',          // 第三十二章：ESG披露
+  '29-carbon-policy-market',    // 第三十三章：碳中和政策与碳市场
+  '30-carbon-data-platform',    // 第三十四章：碳数据平台工程化与Java实战（合并原carbon-data+carbon-java）
+  '32-carbon-compliance-audit', // 第三十五章：碳核算合规与审计
+  '34-algorithm-ds',            // 第三十六章：算法与数据结构
+  'appendix-open-questions',    // 附录
 ]
 
 const text = readFileSync(src, 'utf-8')

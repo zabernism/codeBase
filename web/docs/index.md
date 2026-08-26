@@ -3,7 +3,7 @@ layout: home
 hero:
   name: 面试通关手册
   text: AI + Java 后端
-  tagline: 1274 道面试题 · 39 章 · 覆盖 Java / 并发 / JVM / Spring / AI / RAG / Agent / 云原生 / 系统设计 / 安全 / 中间件 / 双碳（绿色低碳），结合碳管理业务场景
+  tagline: 1206 道面试题 · 36 章 · 覆盖 Java / 并发 / JVM / Spring / AI / RAG / Agent / MCP / 云原生 / 系统设计 / 安全 / 中间件 / 双碳（绿色低碳），结合碳管理业务场景
   actions:
     - theme: brand
       text: 开始刷题
@@ -18,11 +18,11 @@ features:
     link: /practice?category=%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1
   - icon: 🤖
     title: AI / 大模型
-    details: 12 章 · 模型集成 / RAG / Spring AI / LangChain4j / Agent / Prompt / LLMOps / 多模态
+    details: 13 章 · LLM基础 / 模型集成 / RAG / 向量库 / Prompt / Spring AI / LangChain4j / Agent / MCP / AI网关 / LLMOps / 多模态 / 微调
     link: /practice?category=AI%20/%20%E5%A4%A7%E6%A8%A1%E5%9E%8B
   - icon: ☕
     title: Java 后端
-    details: 7 章 · Java 基础 / Spring 全家桶 / Spring Cloud / 并发 JUC / JVM 与 GC / 算法与数据结构 / 安全
+    details: 7 章 · Java 基础 / JVM 与 GC / Spring 全家桶 / Spring Cloud / 并发 JUC / 算法与数据结构 / 安全
     link: /practice?category=Java%20%E5%90%8E%E7%AB%AF
   - icon: 🗄️
     title: 数据与中间件
@@ -34,11 +34,11 @@ features:
     link: /practice?category=%E7%B3%BB%E7%BB%9F%E4%B8%8E%E7%BD%91%E7%BB%9C
   - icon: ☁️
     title: 工程与云原生
-    details: 4 章 · 工程化 / AI 网关 / Docker / Kubernetes / CI/CD
+    details: 2 章 · Docker / Kubernetes / CI/CD / DevOps
     link: /practice?category=%E5%B7%A5%E7%A8%8B%E4%B8%8E%E4%BA%91%E5%8E%9F%E7%94%9F
   - icon: 🌱
     title: 绿色低碳
-    details: 6 章 · 碳足迹核算 / ESG / 碳中和政策与碳市场 / 碳数据平台 / 双碳×Java 复合 / 合规审计
+    details: 5 章 · 碳足迹核算 / ESG / 碳中和政策与碳市场 / 碳数据平台 / 合规审计
     link: /practice?category=%E7%BB%BF%E8%89%B2%E4%BD%8E%E7%A2%B3
   - icon: 📝
     title: 附录

@@ -7,6 +7,18 @@ const raw = (rawData?.default ?? rawData) || { categories: [], questions: [] }
 const questions: any[] = raw.questions || []
 const categories: any[] = raw.categories || []
 
+// 分类配色：每个分类一个主题色（节点描边/计数徽章/左侧色条）
+const categoryColors: Record<string, string> = {
+  '系统设计': '#6366f1',       // indigo
+  'AI / 大模型': '#8b5cf6',    // violet
+  'Java 后端': '#ea580c',      // orange
+  '数据与中间件': '#0891b2',    // cyan
+  '系统与网络': '#16a34a',     // green
+  '工程与云原生': '#2563eb',   // blue
+  '绿色低碳': '#059669',       // emerald
+  '附录': '#64748b',           // slate
+}
+
 // 按 分类 → 章节 → 题目 → 追问 构建树。
 const tree = computed<MindNode>(() => {
   const catNodes: MindNode[] = categories.map((cat) => {
@@ -14,11 +26,10 @@ const tree = computed<MindNode>(() => {
     const bySlug = new Map<string, MindNode>()
     for (const q of qs) {
       if (!bySlug.has(q.slug)) {
-        bySlug.set(q.slug, { label: q.chapter, count: 0, children: [] })
+        bySlug.set(q.slug, { label: q.chapter, count: 0, children: [], color: categoryColors[cat.name] })
       }
       const ch = bySlug.get(q.slug)!
       ch.count = (ch.count || 0) + 1
-      // 题目节点：自身可点击跳转（href），展开后挂追问子节点（children）
       const followupChildren: MindNode[] | undefined =
         q.followups && q.followups.length
           ? q.followups.map((f: any) => ({
@@ -36,6 +47,7 @@ const tree = computed<MindNode>(() => {
     return {
       label: cat.name,
       count: qs.length,
+      color: categoryColors[cat.name],
       children: Array.from(bySlug.values()),
     }
   })
@@ -45,6 +57,37 @@ const tree = computed<MindNode>(() => {
     children: catNodes,
   }
 })
+
+// 搜索过滤
+const searchQuery = ref('')
+const filteredTree = computed<MindNode | null>(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return tree.value
+
+  function filterNode(node: MindNode): MindNode | null {
+    const matchSelf = node.label.toLowerCase().includes(q)
+    if (!node.children) {
+      return matchSelf ? { ...node } : null
+    }
+    const filteredChildren = node.children
+      .map(filterNode)
+      .filter((n): n is MindNode => n !== null)
+    if (matchSelf || filteredChildren.length) {
+      return {
+        ...node,
+        count: filteredChildren.length || node.count,
+        children: filteredChildren.length ? filteredChildren : node.children,
+        _expanded: true,
+      } as MindNode & { _expanded: true }
+    }
+    return null
+  }
+
+  return filterNode(tree.value)
+})
+
+// 搜索时自动展开
+const autoExpand = computed(() => !!searchQuery.value.trim())
 
 // 脑图布局样式可切换：树状（带连线）/ 缩进（简洁）。记忆到 localStorage。
 type MMStyle = 'tree' | 'indent'
@@ -63,12 +106,10 @@ const styleOptions: { key: MMStyle; label: string }[] = [
   { key: 'indent', label: '缩进' },
 ]
 
-// 一键展开全部 / 折叠全部：provide 一个展开信号，子树 inject 后层层响应。
-// expandState 为 null 表示「不强制」，跟随用户手动操作；点击按钮置 true/false
-// 并递增 expandVersion 触发所有已挂载节点的 watch。
+// 一键展开全部 / 折叠全部
 const expandVersion = ref(0)
 const expandState = ref<boolean | null>(null)
-provide('mm-expand', { expandVersion, expandState })
+provide('mm-expand', { expandVersion, expandState, autoExpand })
 function expandAll() {
   expandState.value = true
   expandVersion.value++
@@ -77,6 +118,13 @@ function collapseAll() {
   expandState.value = false
   expandVersion.value++
 }
+
+// 统计
+const stats = computed(() => {
+  const chapterCount = tree.value.children?.reduce((sum, cat) => sum + (cat.children?.length || 0), 0) || 0
+  const followupCount = questions.reduce((sum, q) => sum + (q.followups?.length || 0), 0)
+  return { chapterCount, followupCount }
+})
 </script>
 
 <template>
@@ -89,6 +137,18 @@ function collapseAll() {
         </p>
       </div>
       <div class="mm-head-tools">
+        <div class="mm-search-box">
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="mm-search-input"
+            placeholder="搜索题目..."
+            aria-label="搜索题目"
+          />
+          <svg v-if="searchQuery" class="mm-search-clear" viewBox="0 0 20 20" fill="currentColor" @click="searchQuery = ''">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+          </svg>
+        </div>
         <div class="mm-actions">
           <button class="mm-act-btn" type="button" @click="expandAll">展开全部</button>
           <button class="mm-act-btn" type="button" @click="collapseAll">折叠全部</button>
@@ -106,8 +166,19 @@ function collapseAll() {
       </div>
     </div>
 
+    <div class="mm-stats-bar">
+      <span class="mm-stat"><strong>{{ questions.length }}</strong> 道题目</span>
+      <span class="mm-stat-sep">·</span>
+      <span class="mm-stat"><strong>{{ stats.chapterCount }}</strong> 个章节</span>
+      <span class="mm-stat-sep">·</span>
+      <span class="mm-stat"><strong>{{ stats.followupCount }}</strong> 个追问</span>
+      <span class="mm-stat-sep">·</span>
+      <span class="mm-stat"><strong>{{ categories.length }}</strong> 个分类</span>
+    </div>
+
     <div class="mindmap" :class="`style-${styleMode}`">
-      <MindMapNode :node="tree" :depth="0" :root="true" />
+      <MindMapNode v-if="filteredTree" :node="filteredTree" :depth="0" :root="true" />
+      <div v-else class="mm-empty">未找到匹配「{{ searchQuery }}」的题目</div>
     </div>
   </section>
 </template>
