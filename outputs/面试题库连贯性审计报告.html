@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面试题库连贯性审计报告</title>
+<style>
+:root{
+  --bg:#fcfbf8; --card:#ffffff; --ink:#3d3529; --ink2:#6b6154; --line:#e8e2d6;
+  --red:#c0392b; --redbg:#fdf1ef; --amber:#b7791f; --amberbg:#fdf7e8;
+  --blue:#2563eb; --bluebg:#eef3fe; --green:#0d9488; --greenbg:#eefaf6;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  line-height:1.75;font-size:15px}
+.wrap{max-width:1000px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+.sub{color:var(--ink2);font-size:14px;margin-bottom:28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:22px 24px;margin-bottom:18px}
+h2{font-size:20px;margin:34px 0 14px;padding-bottom:9px;border-bottom:2px solid var(--line)}
+h3{font-size:16px;margin:20px 0 8px}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:20px 0}
+.stat div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
+.stat b{display:block;font-size:26px;line-height:1.2}
+.stat span{font-size:12px;color:var(--ink2)}
+.tag{display:inline-block;font-size:11px;padding:2px 9px;border-radius:20px;margin-right:7px;font-weight:600}
+.t-red{background:var(--redbg);color:var(--red)}
+.t-amber{background:var(--amberbg);color:var(--amber)}
+.t-blue{background:var(--bluebg);color:var(--blue)}
+.t-green{background:var(--greenbg);color:var(--green)}
+.item{border-left:3px solid var(--line);padding:2px 0 2px 15px;margin:15px 0}
+.item.hi{border-color:var(--red)}
+.item.mid{border-color:var(--amber)}
+.item.lo{border-color:var(--blue)}
+code{background:#f2ede4;padding:1px 6px;border-radius:4px;font-size:13px;
+  font-family:"SF Mono",Menlo,monospace}
+pre{background:#f7f4ee;border:1px solid var(--line);border-radius:9px;padding:13px 15px;
+  overflow-x:auto;font-size:13px;line-height:1.65;font-family:"SF Mono",Menlo,monospace}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left}
+th{background:#f5f1e9;font-weight:600}
+.ok{color:var(--green);font-weight:600}
+.bad{color:var(--red);font-weight:600}
+.quote{background:#faf7f1;border-left:3px solid var(--line);padding:9px 13px;margin:9px 0;
+  font-size:13.5px;color:var(--ink2);border-radius:0 7px 7px 0}
+.why{font-size:14px}
+ul{margin:7px 0;padding-left:21px}
+li{margin:4px 0}
+.note{font-size:13px;color:var(--ink2);background:var(--bluebg);border-radius:9px;padding:11px 14px;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>面试题库连贯性审计报告</h1>
+<p class="sub">
+  扫描对象：<code>面试_带追问.md</code>（37 章 / 1263 题 / 45,071 行 / 3.3 MB）<br>
+  审计方式：脚本确定性扫描 + 三段并行分章深审 + <b>逐条原文复核</b>　·　2026-10-19
+</p>
+
+<div class="card">
+<b>一句话结论：骨架健康，问题集中在"多批次拼接"的接缝处。</b><br>
+章号连续、章内题号零缺号零重号、构建配置与章节顺序完全对应、追问体系规范——这些"容易乱"的指标零失误。
+但有 <b>7 处高危问题</b>必须在面试前修掉，其中 <b>Spring AI / LangChain4j 沿用 0.3.x 旧 API 并引用了不存在的类</b>（第 7、8 章），
+加上 <b>Scope 3 十五类编号整体错位</b>（双碳核心背诵点）与 <b>线程池策略四处自相矛盾</b>，都是"一问就露"的类型。
+另有 <b>37 个空伪题会直接显示在网站上</b>。
+</div>
+
+<div class="stat">
+  <div><b style="color:var(--red)">7</b><span>高危矛盾/错误</span></div>
+  <div><b style="color:var(--amber)">8</b><span>中危问题</span></div>
+  <div><b style="color:var(--blue)">4</b><span>结构性问题</span></div>
+  <div><b style="color:var(--green)">7</b><span>体检通过项</span></div>
+  <div><b>1263</b><span>题目总数</span></div>
+</div>
+
+<h2>一、高危：事实错误与自相矛盾</h2>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">事实错误</span>
+<b>Scope 3 十五类清单编号整体错位，且同章自相矛盾</b><br>
+<span style="color:var(--ink2)">第 31 章 碳足迹核算 · <code>L42719</code></span>
+<div class="quote">背诵级：15 类——1 采购商品与服务、2 资本品、<b>3 上游运输配送</b>、4 上游废弃物、5 商务差旅、6 员工通勤、7 上游租赁资产、8 下游运输配送、9 下游加工、10 下游租赁资产、11 特许经营、12 投资、13 下游产品使用、14 下游产品废弃、15 下游特许经营。</div>
+<p class="why">按 GHG Protocol《企业价值链核算与报告标准》，正确编号应为：
+<b>3 燃料与能源相关（上游）· 4 上游运输配送 · 5 运营废弃物 · 6 商务差旅 · 7 员工通勤 · 8 上游租赁资产 ·
+9 下游运输配送 · 10 下游加工 · 11 下游产品使用 · 12 下游产品废弃 · 13 下游租赁资产 · 14 特许经营 · 15 投资</b>。
+文中 3–15 几乎逐条错位，且<b>"特许经营"重复出现在 11 与 15 两个位置</b>。</p>
+<div class="note">更严重的是<b>同章自相矛盾</b>：<code>L43149</code> 与 <code>L43155</code> 又正确写成"类别 11=下游产品使用、类别 12=下游产品废弃"。同一章里两套编号，读者无所适从。这是双碳方向面试的核心背诵点，错了直接露怯。</div>
+</div>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">前后矛盾</span>
+<b>AI 场景线程池拒绝策略三处互相打架</b><br>
+<span style="color:var(--ink2)">第 15 章 / 第 21 章 · <code>L15416</code> <code>L15445</code> <code>L32258</code> <code>L32305</code></span>
+<table>
+<tr><th>位置</th><th>说法</th></tr>
+<tr><td><code>L15445</code></td><td>AI 场景<b>选 CallerRunsPolicy</b>——"宁可慢不能错"，反压保护下游</td></tr>
+<tr><td><code>L32258</code></td><td>碳管家 AI 调用池 <code>handler=CallerRunsPolicy</code>，core=8 / max=20 / queue=100</td></tr>
+<tr><td><code>L32305</code></td><td><b>明确反对</b>："不使用 CallerRunsPolicy，因为 AI 调用耗时 3 秒会阻塞 Tomcat 线程导致服务假死"，改走 MQ 重试</td></tr>
+<tr><td><code>L15416</code></td><td>AI 线程池 <code>core=50, max=200, queue=100</code> ← 与 L32258 的 8/20 参数也冲突</td></tr>
+</table>
+<p class="why">这四处讲的是<b>同一个"碳管家 AI 调用线程池"</b>，却给出两套参数和相反的策略结论。面试官只要顺着问一句"你刚才说用 CallerRunsPolicy，那 Tomcat 线程被阻塞怎么办"，整段就崩。</p>
+</div>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">事实错误</span>
+<b>ZGC「&lt;1ms」被归错因，章内追问自己拆台</b><br>
+<span style="color:var(--ink2)">第 15 章 Java基础 · <code>L15607</code> vs <code>L15628</code>，另 <code>L15602</code> vs <code>L15607</code></span>
+<div class="quote">L15607：传统 G1 在<b>大堆（Milvus 客户端缓存上百 GB）</b>下 Full GC 停顿秒级。ZGC 分代把 STW 通常控制在亚毫秒级。<br>
+L15628（追问答案）：ZGC 的 &lt;1ms 指的是 <b>GC 的 STW 暂停</b>…<b>与堆里"有什么对象、对象多大"无关</b>。</div>
+<p class="why">L15607 把收益归因于"堆里对象多/大"，而 L15628 明确说与对象大小无关——<b>前因与结论自相矛盾</b>。正确的因果应是：ZGC 靠<b>并发标记/转移 + 染色指针</b> 把 STW 压到亚毫秒，与堆容量、对象大小都无关；真正该讲的是"临时数组与 Prompt 字符串在年轻代频繁生死"造成的分配压力。另：L15602 把 ZGC 分代归到 <b>JDK 21/25</b>，L15607 写 <b>JDK 23</b>，同章版本标注不一致。</p>
+</div>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">前后矛盾</span>
+<b>IFRS S2 韧性分析是否强制情景分析，前后不一致</b><br>
+<span style="color:var(--ink2)">第 32 章 ESG披露 · <code>L42931</code> vs <code>L42941</code></span>
+<p class="why"><code>L42931</code> 说韧性分析<b>「须用气候情景」</b>；<code>L42941</code> 说<b>「鼓励但非强制使用情景分析」</b>。S2 原文是 <code>climate scenario analysis shall be conducted</code>，属强制；但"鼓励覆盖 1.5℃"是鼓励项。两者被混为一谈，需拆开表述。</p>
+</div>
+
+<h2>二、中危：引用失效与表述不准</h2>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>附录基线表与正文硬指标冲突</b><br>
+<span style="color:var(--ink2)"><code>L44866</code> 附录「个人履历基线」明确写"修改只改此处"，检索准确率 = <b>70%+ → 90%+</b>；
+但正文 <code>L2342</code>、<code>L2369</code>、<code>L4585</code> 写的是 <b>75% → 92%</b>。</span>
+<p class="why">附录自称唯一基线，正文却是另一套数。面试时若被追问"你到底是 90 还是 92"会很难解释。</p>
+</div>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>章号引用大面积指错（9 处）</b><br>
+<span style="color:var(--ink2)">章节大幅重排后，正文交叉引用未同步</span>
+<table>
+<tr><th>行</th><th>文中写法</th><th>内容实际所在章</th></tr>
+<tr><td><code>L15639</code></td><td>见<b>第十二章</b> 12.1（Spring Boot 自动装配）</td><td class="bad">第十七章 Spring全家桶</td></tr>
+<tr><td><code>L16479</code></td><td>见<b>第十二章</b> 12.15（统一异常处理）</td><td class="bad">第十七章 Spring全家桶</td></tr>
+<tr><td><code>L16491</code></td><td>见<b>第十二章</b> 12.3（自定义 Starter）</td><td class="bad">第十七章 Spring全家桶</td></tr>
+<tr><td><code>L15725</code></td><td>见<b>第十四章</b> 14.27（慢 SQL 排查）</td><td class="bad">第十九章 MySQL</td></tr>
+<tr><td><code>L15812</code></td><td>见<b>第十五章</b> 15.9-15.12（缓存穿透击穿雪崩）</td><td class="bad">第二十章 Redis</td></tr>
+<tr><td><code>L15735</code></td><td>见<b>第十九章</b>（Docker/K8s 排查）</td><td class="bad">第二十六章</td></tr>
+<tr><td><code>L15735</code></td><td>与<b>第二十二章</b>（操作系统排查方法论）</td><td class="bad">第二十九章 操作系统</td></tr>
+<tr><td><code>L40714</code></td><td>Prompt 注入（见<b>第二十五章</b>）</td><td class="bad">第十三章 多模态AI与AI安全</td></tr>
+<tr><td><code>L12539</code></td><td>详见<b>第十一章</b>第 29 题</td><td class="bad">指向存疑</td></tr>
+</table>
+</div>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>题号引用集体失效（14 处）</b><br>
+<span style="color:var(--ink2)">题号前缀已从 <code>### 11.1</code> 改为章内序号 <code>### 1.</code>，但正文仍用带章前缀的写法</span>
+<div class="quote"><code>L30666</code> 见15.24　<code>L31349</code> 详见15.12节　<code>L31357</code> 详见15.23节　<code>L31405</code> 详见15.25节　<code>L31878</code> 详见15.30节　<code>L32077</code> 详见15.20节<br>
+<code>L15639</code> 12.1 / 12.4　<code>L15725</code> 14.27　<code>L15812</code> 15.9-15.12、15.20、15.39　<code>L16479</code> 12.15、12.56　<code>L16491</code> 12.3、12.4</div>
+<p class="why">这些 <code>15.24</code> 式引用现在无法定位到任何题——因为第 20 章的题号是 <code>### 1.</code>～<code>### 42.</code>，没有 <code>15.x</code> 这种编号。</p>
+</div>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>内存屏障表述两处不准</b>
+<ul>
+<li><code>L33018</code>：「volatile <b>读操作后</b>的操作不会被重排到读<b>之前</b>（<b>LoadLoad</b> 屏障）」——LoadLoad 只能禁止「读-读」重排，禁止「读-写」重排需 <code>LoadStore</code>。</li>
+<li><code>L16707</code>：屏障列举写成「LoadLoad/StoreStore/LoadStore/<b>StoreStore</b>」——<b>StoreStore 重复、缺 StoreLoad</b>。</li>
+</ul>
+<p class="why">对照 <code>L15519</code>（第 15 章）写得是对的（写前 StoreStore、写后 StoreLoad、读前 LoadLoad、读后 LoadStore），说明正确表述本来就有，只是第 16 章没同步。</p>
+</div>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>Redis embstr 表述不准</b><br>
+<span style="color:var(--ink2)"><code>L30322</code></span>
+<div class="quote">embstr 编码：字符串 ≤44 字节时 RedisObject 和 SDS 连续分配一块内存，紧凑高效<b>不可修改</b>。</div>
+<p class="why">「44 字节阈值」是对的，但"<b>不可修改</b>"不准确——embstr 是<b>可追加</b>的（append 时重新分配并复制），只是<b>不支持任意位置修改</b>（那是 raw 的区别）。这题按现在这么背，选 B 选项会选错。</p>
+</div>
+
+<h2>三、结构性问题（会直接显示在网站上）</h2>
+
+<div class="item lo">
+<span class="tag t-blue">结构</span><b>37 个"空伪题"：分节标题被当成题目</b><br>
+<span style="color:var(--ink2)">已确认进入 <code>web/docs/data/questions.json</code>，会出现在刷题页与脑图</span>
+<p class="why"><code>split.mjs</code> 第 207 行按 <code>/^### /</code> 切题。以下这些<b>只有标题、没有答案</b>的 H3 被当成了一道题：</p>
+<table>
+<tr><th>章</th><th>数量</th><th>样例</th></tr>
+<tr><td>第十七章 Spring全家桶</td><td class="bad">15</td><td><code>一、Spring Boot 自动装配深入</code>…<code>十五、Spring 定时任务</code></td></tr>
+<tr><td>第十八章 Spring Cloud</td><td class="bad">15</td><td><code>一、服务注册与发现</code>…<code>十五、微服务测试策略</code></td></tr>
+<tr><td>第 25 / 26 章</td><td>12</td><td>创建型模式、结构型模式、行为型模式、Docker核心、K8s核心概念…</td></tr>
+<tr><td>4 / 7 / 8 / 22 / 25 / 26 章</td><td>6</td><td><code>补充专题：XXX（新增 N 题）</code></td></tr>
+</table>
+<div class="note">副作用：这些分节<b>占用了题号锚点</b>——例如 <code>q-17-1</code> 给了"一、Spring Boot 自动装配深入"这个分节，真正的第 1 题变成 <code>q-17-2</code>。</div>
+</div>
+
+<div class="item lo">
+<span class="tag t-blue">结构</span><b>7 个"纯指针题"：答案是一句失效的相对引用</b>
+<div class="quote"><code>L5882</code>「为什么要用向量数据库？」→ 全文：<b>见第三部分第5题。</b><br>
+<code>L6453</code>「Spring AI 中 Prompt 是什么？」→ <b>见第四部分第19题。</b><br>
+<code>L2127</code> → 详见第六部分第 5 题。　<code>L2143</code> → 详见第二部分第 7-8 题。</div>
+<p class="why">章节被拆分重排后，"第三部分""第四部分"这种<b>章内相对引用已经不存在了</b>。读者点进来只得到一句指向虚无的话。</p>
+</div>
+
+<div class="item lo">
+<span class="tag t-blue">结构</span><b>4 组跨章重复题</b>
+<ul>
+<li>「为什么要用向量数据库」：第 4 章 <code>L4481</code>（有答案） vs 第 5 章 <code>L5880</code>（纯指针）</li>
+<li>「Spring AI 中 VectorStore 作用是什么」：第 4 章 <code>L4500</code> vs 第 5 章 <code>L5895</code></li>
+<li>「Spring AI 中 Prompt 是什么」：第 6 章 <code>L6451</code> vs 第 7 章 <code>L7710</code></li>
+<li>「什么是 PromptTemplate」：第 6 章 <code>L6467</code> vs 第 7 章 <code>L7630</code></li>
+</ul>
+</div>
+
+<div class="item lo">
+<span class="tag t-blue">体例</span><b>若干一致性问题（不影响正确性，影响观感）</b>
+<ul>
+<li><b>卡片式 / 散文式混用</b>：235 道题用「难度/考点/参考答案/深度解析/易错点」五位一体，1028 道用散文体。而其中 Spring Cloud（2/57）、MySQL（2/52）、Redis（2/42）、CI/CD（9/29）、操作系统（8/43）、算法（18/25）是<b>同章内两种体例混排</b>——明显是不同批次拼接的痕迹。</li>
+<li><b>29 / 37 章没有导语</b>：打开章节直接进第一题，缺"本章讲什么、怎么学"的引入。</li>
+<li><b>3 张 SVG 未被引用</b>：<code>ai-assistant-architecture.svg</code>、<code>business-overview.svg</code>、<code>report-generation-system.svg</code>。</li>
+<li><b>7 个纯指针题 + 37 个空伪题无追问</b>，共 51 题缺追问（占 4%），集中在第 17/18 章。</li>
+</ul>
+</div>
+
+<h2>四、第 1–14 章（AI 部分）专项深审</h2>
+<div class="card">
+<p>第 1–14 章共 14,000 行、约 600 题，是体量最大的一块。逐题深审后，<b>问题密度最高的是第 7 章 Spring AI 与第 8 章 LangChain4j</b>——两章共 100 题，却集中了整库最多的硬伤。</p>
+</div>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">API 事实错误</span>
+<b>Spring AI 1.0 API 用了 0.3.x 的旧写法（3 处）</b>
+<table>
+<tr><th>行</th><th>文中写法</th><th>Spring AI 1.0 实际</th></tr>
+<tr><td><code>L4535</code></td><td><code>SearchRequest.query(q).<b>withTopK</b>(5)</code></td><td>应为 <code>.topK(5)</code></td></tr>
+<tr><td><code>L4542</code></td><td><code>.<b>context(docs)</b></code> // Document 作为 context</td><td>1.0 中 <code>.context()</code> 无参（设 system 上下文），传 <code>List&lt;Document&gt;</code> 是 0.3.x 旧 API，已移除</td></tr>
+<tr><td><code>L7913</code></td><td><code>void add(String conversationId, Message message);</code></td><td>1.0 接口为 <code>void add(UUID conversationId, List&lt;Message&gt; messages)</code></td></tr>
+</table>
+<p class="why">Spring AI 1.0 GA 是 2025 年 5 月才发布的，<b>这批题大量沿用 0.3.x API</b>。面试官若按 1.0 追问，这三处会直接暴露。</p>
+</div>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">API 不存在</span>
+<b>引用了不存在的 <code>RedisChatMemory</code></b><br>
+<span style="color:var(--ink2)"><code>L7926</code> <code>new RedisChatMemory(redisTemplate)</code>　|　<code>L8799</code> 再次提及</span>
+<div class="quote">- <code>InMemoryChatMemory</code> 单实例；生产用 <code>JdbcChatMemory</code> / <code>RedisChatMemory</code> 持久化。</div>
+<p class="why">Spring AI <b>官方并未内置 <code>RedisChatMemory</code></b>，内置实现只有 InMemory / MessageWindow / Jdbc / Neo4j / Cassandra 等。要持久化到 Redis 需<b>自己实现 <code>ChatMemory</code> 接口</b>（或用官方推荐的 JdbcChatMemory + Redis 做二级缓存）。</p>
+</div>
+
+<div class="item hi">
+<span class="tag t-red">高危</span><span class="tag t-blue">API 事实错误</span>
+<b>LangChain4j 主推用法调用了不存在的方法</b><br>
+<span style="color:var(--ink2)">第 8 章 <code>L4464–4472</code></span>
+<div class="quote"><code>String answer = aiServices.chat(UserMessage.from(query))</code><br>
+<code>&nbsp;&nbsp;.retrievalAugmentor(DefaultRetrievalAugmentor.builder()</code></div>
+<p class="why"><code>AiServices</code> 接口<b>没有 <code>chat(Message)</code> 方法</b>，正确的是 <code>chat(String)</code>；<code>retrievalAugmentor</code> 属旧版 API，1.x 改为 <code>chatMemoryProvider(...)</code> 搭配 <code>ContentRetriever</code>。文中 <code>UserMessage</code> 还没 import，孤零零一个 lambda 变量。</p>
+</div>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>Advisor 接口签名两处都不是官方签名，且互不兼容</b><br>
+<span style="color:var(--ink2)"><code>L8155</code> vs <code>L8697</code></span>
+<table>
+<tr><td><code>L8155</code></td><td><code>AdvisedRequest adviseRequest(AdvisedRequest request, Map&lt;String,Object&gt; context);</code></td></tr>
+<tr><td><code>L8697</code></td><td><code>AdvisedResponse advise(AdvisedRequest req, StreamFunction&lt;AdvisedRequest,AdvisedResponse&gt; next)</code></td></tr>
+</table>
+<p class="why">Spring AI 1.0 官方签名是 <code>AdvisedResponse advise(AdvisedRequest, CallAdvisorChain)</code> / <code>StreamAdvisor</code> 分家，两处均非真实 API。</p>
+</div>
+
+<div class="item mid">
+<span class="tag t-amber">中危</span><b>跨章引用失效 3 处</b>
+<ul>
+<li><code>L4394</code>、<code>L10112</code>：指向「<b>0. 积木LCA云平台 · 系统架构总览</b>」——第一章该题实际是 <code>### 1.</code>，无 0 号题。</li>
+<li><code>L5089</code> 附近：指向本章第 37 题，但该引用对应的是第 5 章的题号，跨章后失效。</li>
+<li><code>L12539</code>：「详见第十一章第 29 题」——「优化四阶段」实为第 3 章内容。</li>
+</ul>
+</div>
+
+<div class="item lo">
+<span class="tag t-blue">体例</span><b>「补充专题」占位式标题 + 术语不统一</b>
+<ul>
+<li>第 4 / 7 / 8 章用 <code>### 补充专题：XXX（新增 N 题）</code> 作为 H3——既是空伪题，又把写作批次痕迹暴露在读者面前。</li>
+<li>Embedding 模型写法混用：<code>bge-large-zh</code>（26 次）vs <code>bge-large-zh-v1</code>（8 次），正式名为 <b>BGE-large-zh-v1.5</b>。</li>
+<li><code>L8410</code> 仍在用「FunctionCallback 是 Tool Calling 核心」立题，而同库 <code>L8138</code> 已说明 1.0 改用 <code>@Tool</code>——概念应统一。</li>
+</ul>
+</div>
+
+<div class="card">
+<b>这一块的正面结论：</b>
+<ul>
+<li><span class="ok">✓</span> <b>Spring AI 版本表述全库统一</b>：8 处均为「1.0 / 1.0 GA」，无版本漂移（只是 API 用成了旧版）。</li>
+<li><span class="ok">✓</span> <b>RAG 流程步数无冲突</b>：全库未出现「RAG 是六步流程」这类易跨章打架的硬性表述。</li>
+<li><span class="ok">✓</span> 模型选型口径稳定：Qwen-Plus / Turbo / VL / Qwen2-72B 分工明确，Milvus 2.4 全库一致。</li>
+</ul>
+</div>
+
+<h2>五、体检通过项（这些做得很好，不用动）</h2>
+<div class="card">
+<ul>
+<li><span class="ok">✓</span> <b>章号 1–36 连续、唯一、无缺号</b>，格式全部统一为「第N章：标题」</li>
+<li><span class="ok">✓</span> <b>章内题号 1..N 全部连续</b>，36/36 章无缺号、无重号（这是最容易乱的指标，零失误）</li>
+<li><span class="ok">✓</span> <b>slug 与章节顺序完全对应</b>——重构后 <code>split.mjs</code> 的 <code>slugs</code> 数组已同步，URL 不会张冠李戴</li>
+<li><span class="ok">✓</span> <b>追问格式零误用</b>：<code>**追问**：</code> 加粗式 0 处（会导致追问不渲染），<code>- 追问N：</code> 共 2773 项</li>
+<li><span class="ok">✓</span> <b>无手写锚点、无残留原生 HTML 块</b>（不会被 split.mjs 转义破坏）</li>
+<li><span class="ok">✓</span> <b>三张架构图完好</b>（arch-overview / cortex-rag / matrix），路径写法 <code>./images/</code> 也被 split.mjs 正确兼容</li>
+<li><span class="ok">✓</span> 235 道五位一体卡片五项齐全、无残缺</li>
+</ul>
+</div>
+
+<h2>六、修复优先级建议</h2>
+<div class="card">
+<table>
+<tr><th>优先级</th><th>动作</th><th>工作量</th></tr>
+<tr><td><b>P0</b></td><td><b>Spring AI / LangChain4j 旧 API 与不存在的类</b>：<code>L4535</code> withTopK、<code>L4542</code> .context(docs)、<code>L7913</code> ChatMemory.add、<code>L7926/L8799</code> RedisChatMemory、<code>L4464-4472</code> aiServices.chat(Message)</td><td>5 处</td></tr>
+<tr><td><b>P0</b></td><td>修 <code>L42719</code> Scope 3 十五类编号（对齐 GHG Protocol 标准序号）</td><td>1 行</td></tr>
+<tr><td><b>P0</b></td><td>统一 AI 调用线程池策略与参数（<code>L15416/L15445/L32258/L32305</code> 四处取一）</td><td>4 处</td></tr>
+<tr><td><b>P0</b></td><td>修 ZGC 因果表述 + JDK 版本标注（<code>L15602/L15607</code>）</td><td>2 处</td></tr>
+<tr><td><b>P1</b></td><td>9 处章号引用 + 14 处题号引用 + 3 处跨章引用改为当前有效编号</td><td>26 处</td></tr>
+<tr><td><b>P1</b></td><td>37 个空伪题：分节标题从 <code>### </code> 降为 <code>#### </code>（或让 split.mjs 识别分节不计入题号）</td><td>37 处 / 或改脚本</td></tr>
+<tr><td><b>P1</b></td><td>Advisor 签名（<code>L8155/L8697</code>）改为 Spring AI 1.0 官方签名</td><td>2 处</td></tr>
+<tr><td><b>P2</b></td><td>7 个纯指针题补答案或改为有效交叉引用；4 组重复题合并</td><td>11 处</td></tr>
+<tr><td><b>P2</b></td><td>附录基线 70/90 与正文 75/92 统一口径（正文现在有三套）</td><td>4 处</td></tr>
+<tr><td><b>P2</b></td><td>IFRS S2 情景分析强制性表述统一（<code>L42931/L42941</code>）</td><td>2 处</td></tr>
+<tr><td><b>P3</b></td><td>统一卡片式/散文式体例；补章节导语；引用 3 张闲置 SVG；统一 BGE 模型写法</td><td>体例工程</td></tr>
+</table>
+</div>
+
+<div class="note">
+<b>关于本次审计的可信度：</b>结构类结论（章号、题号、伪题、引用失效）来自脚本扫描，<b>可复现、确定性 100%</b>；
+语义类结论由三段并行深审产出初稿后，我<b>逐条用原文比对验证，并剔除了 9 条误报</b>——
+volatile「前后矛盾」（实为措辞差异，<code>L16741</code> 与 <code>L15519</code> 说法一致）、Sustainalytics 量程（<code>L42993</code> 实际写"0-10 优"正确）、
+HS Code、水合碳（grep 全库不存在）、跨主机 Overlay 缺失（<code>L41007-41012</code> 讲得完整）、Floyd 描述缺失（<code>L44591-44599</code> 数学推导完全正确）、
+FunctionCallback 矛盾（<code>L8410</code> 只是题面非矛盾）、语义缓存阈值 0.55（全库不存在）、MySQL 覆盖索引。<br>
+<b>所有进入本报告的行号均已亲自核对原文</b>，可直接用于修复。
+</div>
+
+</div>
+</body>
+</html>

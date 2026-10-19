@@ -200,11 +200,41 @@ for (let i = 0; i < chapters.length; i++) {
   let fIdx = 0
   let inCode = false
 
-  const modified = body.map(line => {
+  // 预扫描：识别「分节标题」——用 H3 写成、但自身没有内容的行。
+  // 典型如 `### 一、Spring Boot 自动装配深入`、`### 补充专题：XXX`、`### 创建型模式`。
+  // 这些不是题目：既不该占用题号/锚点，也不该出现在刷题页与脑图里。
+  // 判据：该 ### 行之后、到下一个 ### / ## 之前（跳过代码块）没有任何非空行。
+  const sectionAt = new Set()
+  {
+    let scanCode = false
+    for (let k = 0; k < body.length; k++) {
+      const l = body[k]
+      if (/^```/.test(l)) { scanCode = !scanCode; continue }
+      if (scanCode) continue
+      if (!/^### /.test(l)) continue
+      let hasContent = false
+      let innerCode = false
+      for (let m = k + 1; m < body.length; m++) {
+        const t = body[m]
+        if (/^```/.test(t)) { innerCode = !innerCode; continue }
+        if (innerCode) continue
+        if (/^###/.test(t) || /^## /.test(t)) break
+        if (t.trim()) { hasContent = true; break }
+      }
+      if (!hasContent) sectionAt.add(k)
+    }
+  }
+
+  const modified = body.map((line, bi) => {
     if (/^```/.test(line)) inCode = !inCode
     if (inCode) return line
 
     if (/^### /.test(line)) {
+      // 分节标题：降级为 H4 渲染（层级小于题目），但不计入题号、不生成题目锚点
+      if (sectionAt.has(bi)) {
+        fIdx++
+        return escapeHtmlLikeTags(`${line.replace(/^### /, '#### ')} {#s-${i + 1}-${fIdx}}`)
+      }
       qIdx++
       const anchor = `q-${i + 1}-${qIdx}`
       questions.push({
