@@ -3,7 +3,7 @@ layout: home
 hero:
   name: 面试通关手册
   text: AI + Java 后端
-  tagline: 1206 道面试题 · 36 章 · 覆盖 Java / 并发 / JVM / Spring / AI / RAG / Agent / MCP / 云原生 / 系统设计 / 安全 / 中间件 / 双碳（绿色低碳），结合碳管理业务场景
+  tagline: 1210 道面试题 · 37 章 · 覆盖 Java / 并发 / JVM / Spring / AI / RAG / Agent / MCP / 云原生 / 系统设计 / 安全 / 中间件 / 双碳（绿色低碳），结合碳管理业务场景
   actions:
     - theme: brand
       text: 开始刷题

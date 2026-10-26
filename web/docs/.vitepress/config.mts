@@ -4,6 +4,8 @@ import { categories } from '../../scripts/categories.mjs'
 // 目录（侧边栏/导航）由 split.mjs 从 面试_带追问.md 自动生成，作为唯一真相源，
 // 不再手写章节表，避免与 md 脱节导致 404/点不动。
 import chaptersManifest from '../data/chapters.json'
+// 题目清单（同样由 split.mjs 生成），用于首页 tagline 自动同步题数，避免手写数字与实际脱节
+import questionsManifest from '../data/questions.json'
 
 const ghUser = 'zabernism'
 
@@ -85,6 +87,25 @@ export default withMermaid(defineConfig({
   head: [
     ['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
   ],
+  // 首页 hero 的题数/章数从 split.mjs 产物实时读取并回填，
+  // 避免重构题库后手写的 tagline 数字与实际内容脱节（曾出现 1206 道 / 36 章 vs 实际 1210 道 / 37 章）。
+  transformPageData(pageData) {
+    const hero = pageData.frontmatter?.hero
+    if (hero?.tagline && typeof hero.tagline === 'string') {
+      hero.tagline = hero.tagline
+        .replace(/(\d+)\s*道面试题/, `${questionsManifest.questions.length} 道面试题`)
+        .replace(/(\d+)\s*章/, `${chaptersManifest.length} 章`)
+    }
+    // 分类卡片的章数同样从 categories.mjs 的 slug 数实时回填（卡片 title 即分类名）
+    const features = pageData.frontmatter?.features
+    if (Array.isArray(features)) {
+      for (const f of features) {
+        if (typeof f?.details !== 'string') continue
+        const cat = categories.find(c => c.name === f.title)
+        if (cat) f.details = f.details.replace(/(\d+)\s*章/, `${cat.slugs.length} 章`)
+      }
+    }
+  },
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
