@@ -225,6 +225,24 @@ for (let i = 0; i < chapters.length; i++) {
     }
   }
 
+  // 预扫描：每题的重要度星级（源文档里写作 `**重要度**：★★★★★`，紧跟在题目标题下方）
+  const importanceAt = new Map()   // body 行索引 -> 星级数
+  {
+    let scanCode = false
+    let pending = -1
+    for (let k = 0; k < body.length; k++) {
+      const l = body[k]
+      if (/^```/.test(l)) { scanCode = !scanCode; continue }
+      if (scanCode) continue
+      if (/^### /.test(l)) { pending = k; continue }
+      const im = l.match(/^\*\*重要度\*\*[:：]\s*(★+)/)
+      if (im && pending >= 0) {
+        importanceAt.set(pending, im[1].length)
+        pending = -1
+      }
+    }
+  }
+
   const modified = body.map((line, bi) => {
     if (/^```/.test(line)) inCode = !inCode
     if (inCode) return line
@@ -237,6 +255,7 @@ for (let i = 0; i < chapters.length; i++) {
       }
       qIdx++
       const anchor = `q-${i + 1}-${qIdx}`
+      const stars = importanceAt.get(bi) || 0
       questions.push({
         chapter: title,
         category,
@@ -244,6 +263,7 @@ for (let i = 0; i < chapters.length; i++) {
         anchor,
         title: line.replace(/^### /, '').trim(),
         level: 3,
+        importance: stars,
       })
       return escapeHtmlLikeTags(`${line} {#${anchor}}`)
     }
@@ -251,6 +271,13 @@ for (let i = 0; i < chapters.length; i++) {
     if (/^#### /.test(line)) {
       fIdx++
       return escapeHtmlLikeTags(`${line} {#f-${i + 1}-${fIdx}}`)
+    }
+
+    // 重要度徽章：把 **重要度**：★★★★★ 转成醒目的星级徽章
+    const imp = line.match(/^\*\*重要度\*\*[:：]\s*(★+)\s*$/)
+    if (imp) {
+      const n = imp[1].length
+      return `<span class="imp-badge"><span class="imp-label">重要度</span><span class="imp-stars imp-${n}">${imp[1]}</span></span>`
     }
 
     // 五位一体：把 **难度**：… 这类行转成结构化标签，便于杂志风排版。
@@ -271,7 +298,21 @@ for (let i = 0; i < chapters.length; i++) {
   chapterFollowups[i + 1] = extractFollowups(body, i + 1)
   let content = transformed.join('\n')
   content = content.replace(/\]\((\.\/)?images\//g, '](/images/')
-  const out = `---\ntitle: ${title}\n---\n\n# ${title}\n\n${content}\n`
+
+  // 章首「本章重要度分布」摘要：复习时一眼看到这章有几道必背题
+  const impDist = {}
+  for (const q of questions) {
+    if (q.slug !== slug || !q.importance) continue
+    impDist[q.importance] = (impDist[q.importance] || 0) + 1
+  }
+  const impParts = [5, 4, 3, 2, 1]
+    .filter(n => impDist[n])
+    .map(n => `<span class="imp-chip imp-${n}">${'★'.repeat(n)} ${impDist[n]}</span>`)
+  const impSummary = impParts.length
+    ? `\n\n<div class="imp-summary"><span class="imp-summary-label">本章重要度</span>${impParts.join('')}<span class="imp-summary-hint">★越多越该精确背下来</span></div>`
+    : ''
+
+  const out = `---\ntitle: ${title}\n---\n\n# ${title}${impSummary}\n\n${content}\n`
   writeFileSync(join(docsDir, `${slug}.md`), out)
 }
 

@@ -10,6 +10,9 @@ const questions = raw.questions || []
 const totalFollowUps = raw.categories.reduce((a, c) => a + c.count, 0)
 
 const activeCategory = ref('全部')
+// 星级筛选：0 = 不按星级过滤；5 = 只看必背必答
+const activeStars = ref(0)
+const starOptions = [5, 4, 3, 2, 1]
 
 onMounted(() => {
   const params = new URLSearchParams(window.location.search)
@@ -17,6 +20,8 @@ onMounted(() => {
   if (cat && categories.includes(cat)) {
     activeCategory.value = cat
   }
+  const st = Number(params.get('stars'))
+  if (st >= 1 && st <= 5) activeStars.value = st
 })
 
 const counts = computed(() => {
@@ -28,9 +33,25 @@ const counts = computed(() => {
   return c
 })
 
+// 各星级在当前分类下的题数
+const starCounts = computed(() => {
+  const pool = activeCategory.value === '全部'
+    ? questions
+    : questions.filter(q => q.category === activeCategory.value)
+  const c = { 0: pool.length }
+  for (const s of starOptions) c[s] = pool.filter(q => q.importance === s).length
+  return c
+})
+
 const filteredQuestions = computed(() => {
-  if (activeCategory.value === '全部') return questions
-  return questions.filter(q => q.category === activeCategory.value)
+  let list = questions
+  if (activeCategory.value !== '全部') {
+    list = list.filter(q => q.category === activeCategory.value)
+  }
+  if (activeStars.value) {
+    list = list.filter(q => q.importance === activeStars.value)
+  }
+  return list
 })
 
 const groupedQuestions = computed(() => {
@@ -69,6 +90,29 @@ function chapterUrl(q) {
       </button>
     </div>
 
+    <div class="star-tabs">
+      <span class="star-tabs-label">按重要度</span>
+      <button
+        class="tab star-tab"
+        :class="{ active: activeStars === 0 }"
+        @click="activeStars = 0"
+      >
+        全部星级
+        <span class="count">{{ starCounts[0] || 0 }}</span>
+      </button>
+      <button
+        v-for="s in starOptions"
+        :key="s"
+        class="tab star-tab"
+        :class="[{ active: activeStars === s }, `imp-${s}`]"
+        @click="activeStars = activeStars === s ? 0 : s"
+      >
+        {{ '★'.repeat(s) }}
+        <span class="count">{{ starCounts[s] || 0 }}</span>
+      </button>
+      <span class="star-tabs-hint">★越多越该精确背下来</span>
+    </div>
+
     <div v-if="filteredQuestions.length === 0" class="empty">
       该分类下暂无题目
     </div>
@@ -78,6 +122,7 @@ function chapterUrl(q) {
         <h2 class="group-title">{{ chapter }}</h2>
         <ul class="question-list">
           <li v-for="q in items" :key="q.anchor">
+            <span v-if="q.importance" class="q-star" :class="`imp-${q.importance}`">{{ '★'.repeat(q.importance) }}</span>
             <a :href="chapterUrl(q)" class="question-link" :title="q.title">
               {{ q.title }}
             </a>
