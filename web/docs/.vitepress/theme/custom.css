@@ -21,9 +21,11 @@
   --vp-c-brand-soft: rgba(74, 63, 47, 0.12);
 
   /* 代码：暖色暗框 + Java 风格着色（github-dark 主题） */
+  --vp-code-font-size: 0.9em;
   --vp-code-bg: #efe9dc;
   --vp-code-color: #7a5b2e;
   --vp-code-block-bg: #0d1117;
+  --vp-code-block-color: #c9d1d9;
   --vp-code-line-highlight-color: rgba(255, 255, 255, 0.07);
   --vp-code-line-number-color: #6e7681;
   --vp-code-copy-code-color: #adbac7;
@@ -159,6 +161,26 @@
 .vp-doc div[class*="language-"] pre.shiki {
   background: transparent !important;
   margin: 0;
+}
+
+/* 代码块前景色：必须与「行内代码」区分开。
+   VitePress 的 `.vp-doc :not(pre) > code` 规则同样命中代码块内的 <code>，
+   会让【没有语言标识的架构图代码块】（shiki 不着色，span 上没有内联 color）
+   继承 --vp-code-color —— 那个色是给「浅底行内代码」设计的，
+   压在统一的深色代码块底上对比度不足（mint 主题只有约 2.6:1），文字会糊成一片。
+   这里给代码块单独一个高对比度前景色；
+   shiki 的语法高亮走内联 style，优先级更高，不受影响。 */
+.vp-doc pre.vp-code code,
+.vp-doc pre.vp-code code span:not([style]) {
+  color: var(--vp-code-block-color);
+}
+
+/* 深底等宽字：字重 400 在深色背景上笔画偏细，中文尤其显虚；
+   补中文字体栈，避免落到衬线体。 */
+.vp-doc pre.vp-code code {
+  font-weight: 500;
+  font-family: var(--vp-font-family-mono), "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
 }
 
 /* 追问标题（h5）：仅用于「追问N」，醒目左条 */
@@ -674,6 +696,7 @@ html[data-theme='dark'] {
   --vp-code-bg: #232831;
   --vp-code-color: #e0a458;
   --vp-code-block-bg: #0d1117;
+  --vp-code-block-color: #c9d1d9;
   --vp-code-line-highlight-color: rgba(255, 255, 255, 0.06);
   --vp-code-line-number-color: #6e7681;
   --vp-code-copy-code-color: #adbac7;
@@ -702,6 +725,7 @@ html[data-theme='minimal'] {
   --vp-code-bg: #eef0f3;
   --vp-code-color: #cf222e;
   --vp-code-block-bg: #0d1117;
+  --vp-code-block-color: #c9d1d9;
   --vp-code-line-highlight-color: rgba(255, 255, 255, 0.07);
   --vp-code-line-number-color: #6e7681;
   --vp-code-copy-code-color: #adbac7;
@@ -730,6 +754,7 @@ html[data-theme='mint'] {
   --vp-code-bg: #ddf0e6;
   --vp-code-color: #0d7d6f;
   --vp-code-block-bg: #0f1c19;
+  --vp-code-block-color: #d3e8e0;
   --vp-code-line-highlight-color: rgba(255, 255, 255, 0.06);
   --vp-code-line-number-color: #4a6b62;
   --vp-code-copy-code-color: #7fd1c4;
