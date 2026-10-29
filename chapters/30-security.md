@@ -1,0 +1,354 @@
+## 第三十章：通用安全：认证授权与Spring Security
+
+> 本章是通用 Web 安全，与[第十二章](/25-multimodal-security.html)的"AI 特有安全"互补：认证与授权、Session/JWT 取舍、OAuth2 四种授权模式、Spring Security 过滤器链。碳管家是多租户 SaaS，**租户隔离必须在网关与数据访问层双重落实**。
+
+
+
+### 1. 认证（Authentication）与授权（Authorization）的区别是什么？
+**重要度**：★★★★★
+
+**难度**：★
+
+**考点**：安全基础概念辨析，区分"你是谁"与"你能做什么"，为后续 Spring Security 的 Authentication 与 Authorization 机制铺垫。
+
+**参考答案**：认证解决"你是谁"，即校验主体（用户/服务）身份的真实性，如账号密码登录、JWT 验签、OAuth2 获取 token。授权解决"你能做什么"，即校验已认证主体是否具备访问某资源/执行某操作的权限，如角色校验、@PreAuthorize。两者顺序固定：先认证后授权，未认证直接拒绝。
+
+**深度解析**：Spring Security 将二者拆分为 `AuthenticationManager`（认证）与 `AuthorizationFilter`（授权，旧版 FilterSecurityInterceptor）两套链路。官方文档明确 `Authentication` 对象承载 principal、credentials 与 authorities，authorities 即授权依据。在碳管家 AI 助手中，网关先完成认证拿到 tenant_id 与 user_id，再在授权层校验该用户是否属于该租户、是否超额调用配额。
+
+**易错点**：把"登录成功"等同于"有全部权限"；忽略授权必须基于服务端可信身份，而非前端隐藏按钮。
+
+#### 追问：
+- 追问1：为什么必须先认证才能授权，能否跳过认证直接授权？
+  - **答**：不能。授权依赖认证产出的可信主体（principal 与 authorities）。若跳过认证，系统无法确认请求来源，攻击者可用任意身份越权访问。Spring Security 6.x 的 `AuthorizationFilter` 在鉴权不通过时抛 `AccessDeniedException`，再由 `ExceptionTranslationFilter` 依据当前 `Authentication` 是否为匿名/未认证决定返回 **401 或 403**（未认证 → 401，已认证但无权限 → 403）。注意 `AuthenticationException` 是**抽象基类**，实际抛出的是 `BadCredentialsException`（密码错）、`InsufficientAuthenticationException`（凭证不足）等具体子类；`AuthenticationCredentialsNotFoundException` 是旧 `FilterSecurityInterceptor` 时代的说法，6.x 已不用。
+- 追问2：OAuth2 中 access_token 属于认证还是授权范畴？
+  - **答**：access_token 既是认证凭证也是授权凭证：资源服务器用它验明调用方身份（认证），并据 scope 与 authorities 决定可访问范围（授权）。但 token 内不应存放敏感口令，且 scope 需在授权服务端严格最小化下发。
+
+### 2. Session/Cookie 与 Token(JWT) 两种状态管理方案如何取舍？
+**重要度**：★★★★★
+
+**难度**：★
+
+**考点**：有状态与无状态会话机制的对比，理解 JWT 在分布式/微服务场景下的优势与代价。
+
+**参考答案**：Session/Cookie 将状态存于服务端（内存/Redis），客户端仅持 sessionId，优点是可随时吊销、不易被篡改；缺点是服务端需维护状态，水平扩容与跨域麻烦。JWT 将状态编码进 token，服务端无状态、易横向扩展与跨服务传递；缺点是签发后难以主动吊销、体积大。微服务与无状态网关偏好 JWT。
+
+**深度解析**：Spring Security 默认 `HttpSession` 基于 Servlet 容器；无状态方案需配置 `SessionCreationPolicy.STATELESS` 并接入 `JwtAuthenticationFilter`。碳管家 AI 助手采用网关统一签发 JWT，下游多个推理/配额服务仅凭公钥验签即可信任身份，无需共享 session 存储，契合云原生弹性扩容。
+
+**易错点**：认为 JWT 绝对比 Session 安全；实际上 JWT 一旦泄露在过期前都可用，必须配短过期 + refresh token + 黑名单兜底。
+
+#### 追问：
+- 追问1：JWT 无法主动吊销，如何应对用户登出或被盗用？
+  - **答**：常用三招：
+    - ① 缩短 access_token 有效期（如 15 分钟）
+    - ② 维护服务端 token 黑名单（jti 表）在 `AuthorizationFilter` 前拦截
+    - ③ 使用 refresh token 轮换并在吊销时使 refresh 失效
+    - 碳管家在用户改密时批量作废该租户全部 refresh token。
+- 追问2：跨域场景下 Cookie 与 JWT 谁更友好？
+  - **答**：`Authorization` 是**非简单请求头**，一旦携带，浏览器**必然先发 `OPTIONS` 预检**（带 `Access-Control-Request-Headers: authorization`），服务端必须在 CORS 白名单里 `Access-Control-Allow-Headers` 放行该头，否则请求根本发不出去。所以"放 Authorization 头就免预检"是错的。真正免预检的只有简单请求（GET/HEAD/POST + 三类简单头），想绕开预检只能把凭证放进 Cookie 或 query——query 会进日志/Referer 不安全，于是很多系统改用 **HttpOnly Cookie + `SameSite=Lax/Strict` + 精确 Origin 白名单**，代价是要额外防 CSRF。JWT 放头的优势是不依赖 `withCredentials`、不受 SameSite 限制，代价是 JS 可读、有 XSS 泄露风险，应权衡存储位置。
+
+### 3. 无状态服务为何更偏好 JWT 而非服务端 Session？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：分布式架构下状态一致性的成本，理解无状态设计对弹性伸缩的意义。
+
+**参考答案**：无状态服务要求任意节点都能独立处理请求。若用 Session，需引入共享存储（Redis 集群）并保证一致性，增加运维与延迟；而 JWT 自带签名与声明，节点用密钥/公钥即可本地验签，无需查询中心存储，扩容时无需考虑会话亲和性，故障转移也更平滑。
+
+**深度解析**：在 Kubernetes 多副本部署中，Session 方案要么牺牲弹性（sticky session），要么承担 Redis 网络开销与单点风险。JWT 让网关签发、各微服务验证形成"信任链"。碳管家 AI 助手网关用 RSA 私钥签名，下游配额服务用公钥验签后即可信任 tenant_id，无需回调鉴权中心，降低链路延迟与耦合。
+
+**易错点**：盲目无状态化，把需频繁吊销的敏感操作也交给纯 JWT，导致无法即时止血；此类场景应保留黑名单或改用短期凭证。
+
+#### 追问：
+- 追问1：无状态是否意味着完全不能用任何服务端存储？
+  - **答**：否。"无状态"指请求处理不依赖节点本地会话。仍可用共享存储做限流计数、黑名单、审计日志，只是这些不与请求链路强绑定。碳管家网关用 Redis 做全局配额计数，但鉴权本身仍无状态。
+- 追问2：JWT 体积过大会带来什么问题？
+  - **答**：JWT 每次请求都携带，过大会抬高带宽与首字节延迟，尤其移动弱网。应避免往 payload 塞大对象，只放必要声明（sub、tenant_id、scope、exp、jti）。如需更多属性，服务端按 sub 查用户表补全。
+
+### 4. OAuth2 的四种授权模式分别适用什么场景？
+**重要度**：★★★★★
+
+**难度**：★★
+
+**考点**：OAuth2 授权模式选型，理解不同客户端类型（机密/公共）的取舍。
+
+**参考答案**：按 RFC 6749 原始的四种模式：
+  - ① 授权码模式（Authorization Code）：最安全，有后端的 Web 应用，code 在服务端换 token
+  - ② 隐式模式（Implicit）：**已废弃**，token 直接经 URL 片段返回
+  - ③ 密码模式（Resource Owner Password Credentials，ROPC）：**已废弃**，用户明文密码交给客户端
+  - ④ 客户端凭证模式（Client Credentials）：服务到服务调用，无用户参与，用 client_id/secret 换 token
+
+但必须补一句 **OAuth 2.1（draft-ietf-oauth-v2-1）已经收敛为两种**：只保留「授权码」与「客户端凭证」，**删除 Implicit 与 ROPC**；并要求**所有客户端（含机密客户端）强制 PKCE（S256）**、`redirect_uri` 精确匹配、refresh token 对公共客户端必须轮换或 sender-constrained。今天的正确答法是"2.0 是四种、2.1 只剩两种、其余两种是历史"。
+
+**深度解析**：RFC 9700（OAuth 2.0 Security Best Current Practice，2025-01 定稿）的措辞是 **MUST NOT**——"授权服务器 MUST NOT 允许隐式授权、MUST NOT 支持 ROPC"，这比"建议不用/弃用"强得多，是硬性禁止。另一条常被漏掉的是 **bearer token 一律走 `Authorization` 头，MUST NOT 放在 URI query 里**（query 会进浏览器历史、Referer、网关访问日志）。碳管家 AI 助手对外开放 API 给第三方企业集成时，采用授权码 + PKCE；内部推理服务调用配额服务则用客户端凭证模式，体现"人机"与"机机"两种信任模型。
+
+**易错点**：把密码模式当"简单登录"滥用，第三方应用因此拿到用户明文密码；SPA 仍用隐式模式而非授权码 + PKCE；只背"四种模式"不知道 2.1 已删两种；以为 PKCE 只给公共客户端用（2.1 要求机密客户端也用）。
+
+#### 追问：
+- 追问1：为什么隐式模式被官方弃用？
+  - **答**：隐式模式把 access_token 直接经 URL 片段返回，易泄露于浏览器历史、Referer、JS 上下文，且无法安全下发 refresh token。现代 SPA 改用授权码 + PKCE，token 通过后端交换，安全性显著提升。
+- 追问2：客户端凭证模式需要用户登录吗？
+  - **答**：不需要。它代表"应用自己"而非"某个用户"，适用于定时任务、服务间调用。碳管家夜批统计服务用该模式获取调用配额服务的令牌，scope 限定为只读统计，遵循最小权限。
+
+### 5. 授权码模式完整流程是什么？为何被认为最安全？
+**重要度**：★★★★★
+
+**难度**：★★
+
+**考点**：授权码模式分步时序，理解 code 交换对前端暴露面的收敛作用。
+
+**参考答案**：流程：
+  - ① 用户访问客户端，重定向至授权服务器登录并同意授权
+  - ② 授权服务器回跳客户端回调地址并携带 authorization code
+  - ③ 客户端后端用 code + client_secret 向 token 端点换 access_token/refresh_token
+  - ④ 客户端凭 token 调资源服务器
+  - 安全点在于 token 只在后端传输，浏览器仅见一次性短命 code。
+
+**深度解析**：code 本身无 token 权限且极短过期，即使被截获也无法直接换 token（需 client_secret，公共客户端需 PKCE）。Spring Security OAuth2 Client 自动管理 code 换取与令牌存储。碳管家第三方接入即此流程，code 绑定 `state` 防 CSRF。
+
+**易错点**：回调未校验 `state` 参数，导致 CSRF 登录劫持；code 未设置短过期被重放。
+
+#### 追问：
+- 追问1：state 参数起什么作用，不校验会怎样？
+  - **答**：`state` 是客户端生成的随机值，授权服务器原样回传，用于绑定本次请求会话，防 CSRF 与混淆代理攻击。若不校验，攻击者可诱导用户用自己账号授权后把 code 关联到受害者会话，造成账号绑定劫持。
+- 追问2：授权码模式能否完全防中间人？
+  - **答**：TLS 是基础前提。授权端点与 token 端点必须 HTTPS，否则 code 与 secret 均会泄露。PKCE 进一步缓解公共客户端无 secret 的缺陷，但不能替代传输层加密。
+
+### 6. PKCE 解决了公共客户端的什么问题？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：PKCE（Proof Key for Code Exchange）原理，理解移动端/SPA 等无 secret 客户端的防护。
+
+**参考答案**：公共客户端（原生 App、SPA）无法安全保管 client_secret。PKCE 在授权请求时生成 `code_verifier` 并发送其哈希 `code_challenge`；换取 token 时提交原始 `code_verifier`，授权服务器比对哈希。即使攻击者截获 code，因不知道 verifier 也无法换 token，从而替代了 client_secret 的作用。
+
+**深度解析**：RFC 7636 定义 PKCE，原为保护移动 App，现已成为所有客户端推荐标配。Spring Security 的 OAuth2 Client 支持 `AuthorizationRequestRepository` 配合 PKCE。碳管家移动端用授权码 + S256 方法的 PKCE 接入，避免 secret 硬编码被逆向提取。
+
+**易错点**：认为"公共客户端不需要任何保护"；或把 code_verifier 写死而非每次随机生成，使 PKCE 形同虚设。
+
+#### 追问：
+- 追问1：code_challenge 用 plain 还是 S256？
+  - **答**：必须用 S256（SHA-256 + Base64URL），plain 方式直接传递 verifier 哈希前原文，被截获即失效，RFC 已不推荐。碳管家强制服务端拒绝 plain 挑战方法。
+- 追问2：机密客户端还需要 PKCE 吗？
+  - **答**：需要。PKCE 与 client_secret 互补，可防授权码注入与混淆。OAuth2.1 草案要求所有客户端（含机密）均启用 PKCE，纵深防御。
+
+### 7. refresh token 的作用是什么？如何安全吊销？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：access_token 与 refresh_token 的职责划分，令牌生命周期与吊销策略。
+
+**参考答案**：access_token 有效期短（分钟级），泄露窗口小；refresh token 有效期长，用于无感换发新 access_token，避免用户反复登录。吊销策略：用户登出、改密、风控触发时，使 refresh token 失效（删库/加入黑名单），旧 access_token 过期后即无法续期，实现"软吊销"。
+
+**深度解析**：OAuth2 规范中 refresh token 可绑定 scope 与受众。Spring Authorization Server 提供 `/oauth2/revoke` 端点。碳管家在检测到异地登录时立即吊销该用户全部 refresh token，并通知下游黑名单，既控制影响面又保留短期 access 自然失效。
+
+**易错点**：把 refresh token 当长期万能钥匙存前端；或吊销只删 access 不删 refresh，导致攻击者仍可续期。
+
+#### 追问：
+- 追问1：能否让 access_token 也立即失效？
+  - **答**：纯 JWT 难即时失效，需引入 jti 黑名单在 `AuthorizationFilter` 前置校验，或缩短过期时长。碳管家对高敏操作（删除租户）采用"短 access + 黑名单"双保险，必要时主动拒绝特定 jti。
+- 追问2：refresh token 是否需要轮换？
+  - **答**：推荐轮换（rotation）：每次换发新 access 同时发新 refresh，旧 refresh 作废。若旧 refresh 被复用，说明可能泄露，服务端应吊销整条链。这是 OAuth2.1 推荐做法，可遏制重放。
+
+### 8. JWT 的三段结构（header/payload/signature）各自作用？
+**重要度**：★★★★
+
+**难度**：★
+
+**考点**：JWT 编码结构，base64url 可读性认知，签名防篡改原理。
+
+**参考答案**：JWT 由点分隔的三段：header 声明算法（alg）与类型（typ）；payload 存放声明（sub、exp、tenant_id、scope 等），均为 base64url 编码但**明文可读**；signature 用密钥对前两段签名，接收方验签确认未被篡改。注意 payload 不加密，敏感数据禁止放入。
+
+**深度解析**：RFC 7519 规定 `iss/exp/aud/sub` 等标准声明。Spring Security 的 `JwtDecoder` 解析后做签名与过期校验。碳管家在 payload 放 tenant_id 与 role，下游据此做多租户隔离与鉴权，但绝不放用户手机号等 PII。
+
+**易错点**：误以为 JWT 加密了 payload；把 exp 当作唯一安全边界；alg 设为 none 造成签名绕过漏洞。
+
+#### 追问：
+- 追问1：JWT 与 JWE 有何区别？
+  - **答**：JWT 默认仅签名（JWS），payload 明文；JWE 在签名外再加密，payload 不可读，适合传敏感信息。碳管家仅在跨信任边界传 PII 时才用 JWE，日常用 JWS 即可。
+- 追问2：如何防止 alg=none 攻击？
+  - **答**：服务端 `JwtDecoder` 必须白名单限定算法（如 RS256），拒绝 none 与算法混淆（如用 RSA 公钥当 HMAC 密钥）。Spring Security 默认校验 alg 与预期一致，切勿自定义解码器时放开算法校验。
+
+### 9. HMAC 与 RSA 两种 JWT 签名方式如何选？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：对称（HS256）与非对称（RS256）签名的安全模型差异，密钥分发问题。
+
+**参考答案**：HMAC（HS256）用同一密钥签名验签，简单但密钥需在所有方共享，任何一方泄露即能伪造 token，适合单一受控服务。RSA（RS256）用私钥签名、公钥验签，私钥仅授权服务器持有，下游只拿公钥，无法伪造，适合多方/微服务，是开放生态首选。
+
+**深度解析**：Spring Security 提供 `NimbusJwtDecoder` 配公钥、`JwtEncoder` 配私钥。碳管家网关持 RSA 私钥签发，各微服务用公钥验签，公钥可自由分发且泄露无伪造风险，契合零信任横向信任链。
+
+**易错点**：把 HMAC 密钥硬编码进前端做验签（等于公开签名密钥）；或混用算法导致"密钥混淆"攻击（用公钥当 HMAC secret）。
+
+#### 追问：
+- 追问1：多租户场景下 RSA 公钥如何管理？
+  - **答**：可用 JWK Set 端点（`/.well-known/jwks.json`）动态发布公钥，下游按 `kid` 选钥。碳管家租户隔离场景下每个租户独立密钥对，下游按 token 中 kid 取对应公钥，避免跨租户验签串号。
+- 追问2：HMAC 在什么场景仍可接受？
+  - **答**：仅限完全可信的单一后端内部服务间、且密钥经 KMS 管理、不对外分发时。若涉及第三方或前端，必须 RSA/ECDSA 非对称方案。
+
+### 10. JWT 的过期（exp）与刷新机制如何设计才安全？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：令牌时效权衡，短期 access + 长期 refresh 的最佳实践。
+
+**参考答案**：access_token 设短过期（5–15 分钟）缩小泄露窗口；refresh token 较长（数天至数周）但可吊销。前端用 access 调接口，遇 401 用 refresh 静默续期。应避免把过期设几小时甚至永久，也避免 refresh 永不过期。
+
+**深度解析**：exp 是 NumericDate（秒级 Unix 时间），`JwtDecoder` 自动校验并抛 `ExpiredJwtException`。Spring Security 资源服务器返回 401，客户端触发刷新流程。碳管家对高敏操作（如导出全量碳数据）要求 access 剩余有效期 > 某阈值，防临界过期被截持后滥用。
+
+**易错点**：为省事把 access 过期设为一天；或把 refresh token 存 localStorage 被 XSS 窃取后长期冒充。
+
+#### 追问：
+- 追问1：前端应如何安全存储 refresh token？
+  - **答**：优先 HttpOnly + Secure + SameSite Cookie，隔离 XSS 读取；若必须存 JS 侧，则缩短有效期并绑定设备指纹。碳管家 Web 端将 refresh 置于 HttpOnly Cookie，配合 CSRF 防护。
+- 追问2：服务端如何检测"即将过期"主动刷新？
+  - **答**：客户端在 access 临近 exp（如剩 1 分钟）拦截 401 或主动请求刷新；服务端对并发刷新用分布式锁防多次发新 token，并启用 refresh 轮换防重放。
+
+### 11. 密钥与公钥如何安全管理，避免泄露与伪造？
+**重要度**：★★★★
+
+**难度**：★★★
+
+**考点**：密钥生命周期管理，KMS/HSM、轮换、算法混淆防护。
+
+**参考答案**：私钥严禁入代码或前端，须存 KMS/HSM，按环境隔离；公钥可分发但需校验来源完整性。定期轮换（kid 标识版本），旧钥保留一段时间以验存量 token。禁用弱算法，强制 alg 白名单防算法混淆。泄露立即吊销并轮换，使旧 token 失效。
+
+**深度解析**：Spring 可接 AWS KMS / Vault 取密钥，避免明文配置。碳管家用 Vault 动态签发租户密钥，审计每次签名；公钥经 JWKS 发布，下游校验 kid 与证书链。算法混淆攻击（RS256 公钥当 HS256 密钥）因强制 alg 白名单被阻断。
+
+**易错点**：把私钥提交进 Git；用同一密钥签所有租户导致一处泄露全局沦陷；从不轮换密钥。
+
+#### 追问：
+- 追问1：密钥轮换期间旧 token 会失效吗？
+  - **答**：不会立即失效。需并行保留旧公钥（按 kid 索引）一段时间，待旧 token 自然过期后再下线旧钥。碳管家保留最近 2 个版本公钥，平滑轮换。
+- 追问2：如何用 HSM 提升私钥安全？
+  - **答**：HSM 内私钥不可导出，仅提供签名原语，即使应用被攻破也拿不到明文私钥。结合 KMS 自动轮换，满足合规（等保/ISO27001）。碳管家生产环境签名走 HSM-backed KMS。
+
+### 12. 如何通过 jti/nonce 防止 JWT 重放攻击？
+**重要度**：★★★
+
+**难度**：★★★
+
+**考点**：重放防护机制，一次性令牌与缓存校验。
+
+**参考答案**：重放指攻击者截获合法 token 后重复提交。JWT 自带 exp 限制时间窗，但窗口内仍可重放。强化手段：
+  - ① jti（JWT ID）唯一标识，服务端用 Redis 记录已用 jti，重复即拒（适合高敏写操作）
+  - ② nonce 随机值绑定请求，服务端校验一次性
+  - ③ 结合短期 exp 与 TLS 降低风险
+
+**深度解析**：RFC 7519 将 jti 定义为唯一标识符。碳管家在"删除租户""提额"等不可幂等操作中要求携带 jti，网关写入 Redis 并设置与 exp 一致的 TTL，命中即返回 409，有效防止重放与重复提交。
+
+**易错点**：把 jti 用于所有读请求导致 Redis 压力过大；或 nonce 不随机、可预测而失效。
+
+#### 追问：
+- 追问1：jti 黑名单与 exp 如何取舍性能？
+  - **答**：读多写少用短 exp 即可，不必 jti；仅高敏写操作加 jti 校验。碳管家用分级策略：普通查询靠 exp，资金/配额变更加 jti，平衡安全与性能。
+- 追问2：nonce 与 CSRF token 是一回事吗？
+  - **答**：不是。nonce 防请求重放（重投同一请求），CSRF token 防跨站伪造（诱骗用户浏览器代发）。二者防护维度不同，可同时启用。OAuth 的 state 类似 CSRF 防护而非 nonce。
+
+### 13. Spring Security 过滤器链核心组件有哪些？
+**重要度**：★★★★★
+
+**难度**：★★
+
+**考点**：Spring Security 架构，过滤器顺序与职责，请求处理链路。
+
+**参考答案**：核心过滤器按官方默认顺序：`CorsFilter` / `CsrfFilter`（跨域与 CSRF 必须**早于认证**）→ `SecurityContextHolderFilter`（载入上下文，6.x 已取代弃用的 `SecurityContextPersistenceFilter`）→ 认证过滤器（`UsernamePasswordAuthenticationFilter` 或自定义 `JwtAuthenticationFilter`）→ `ExceptionTranslationFilter`（把认证/授权异常转 401/403）→ `AuthorizationFilter`（`AuthorizationManager` 决策，链条最末端）。任一环节拒绝即中断。
+
+**深度解析**：Spring Security 本质是 servlet `FilterChainProxy` 包裹一组有序 Filter。官方文档强调顺序不可乱：认证须先于授权，异常翻译须在授权之后捕获。`AuthorizationFilter` 用 `AuthorizationManager` 决策，替代旧版 `AccessDecisionManager`。完整锚点顺序（6.x）大致为 `HeaderWriterFilter → CorsFilter → CsrfFilter → LogoutFilter → UsernamePasswordAuthenticationFilter → … → ExceptionTranslationFilter → AuthorizationFilter`；6.0 起不再有 `WebSecurityConfigurerAdapter`，改为声明 `SecurityFilterChain` Bean。
+
+**关于 CSRF 该不该关**：CSRF 攻击能成立的前提是"浏览器会**自动携带**凭证"——即凭证在 Cookie/Session 里。所以判断标准很简单：
+  - 纯无状态 API，凭证只走 `Authorization` 头（JS 显式设置）→ 浏览器不会自动带，**可以 `csrf().disable()`**，这是 `SessionCreationPolicy.STATELESS` 场景的常见做法。
+  - 一旦有 Cookie 承载凭证（典型如 refresh token 放 HttpOnly Cookie，或用了 Session）→ **必须保留 CSRF 防护**：`CookieCsrfTokenRepository.withHttpOnlyFalse()` + 前端回传 `X-XSRF-TOKEN` 的 double submit，或 `SameSite=Lax/Strict`（只能算缓解，不能替代 token）。
+  - CORS 与 CSRF 要配合：`allowCredentials(true)` **禁止**与 `allowedOrigins("*")` 同用，必须写精确 Origin 白名单，否则等于把 CSRF 防护拆掉。
+
+**易错点**：自定义过滤器顺序错误导致未认证就被授权；拼错枚举 `SessionCreationPolicy.STATELESS`（少一个 E 就编译不过）；误以为"上了 JWT 就一律该 `csrf().disable()`"——若 token 存在 Cookie 里，关掉 CsrfFilter 就是直接开门；或在 STATELESS 下仍启用表单登录导致 302 跳登录页污染 API 响应。
+
+#### 追问：
+- 追问1：如何自定义过滤器并指定顺序？
+  - **答**：实现 `Filter` 后通过 `HttpSecurity.addFilterBefore/After` 插入指定锚点（如 `UsernamePasswordAuthenticationFilter.class`）。碳管家将 `JwtAuthenticationFilter` 置于 `AuthorizationFilter` 之前，确保授权前有 Authentication。
+- 追问2：ExceptionTranslationFilter 处理哪些异常？
+  - **答**：主要捕获 `AuthenticationException`（→ 401 触发登录）与 `AccessDeniedException`（已认证则 403，未认证则 401）。它把安全异常翻译成 HTTP 响应，是统一错误入口。
+
+### 14. UserDetails / UserDetailsService / PasswordEncoder 的职责分别是什么？
+**重要度**：★★★★★
+
+**难度**：★★
+
+**考点**：Spring Security 认证核心接口，用户模型与密码编码。
+
+**参考答案**：`UserDetails` 是框架的用户模型，封装 username、password、authorities 等；`UserDetailsService` 按用户名加载用户（常查库），供 `AuthenticationManager` 比对；`PasswordEncoder` 负责密码哈希与比对，禁止明文。三者解耦：数据源、用户模型、加密算法各自可替换。
+
+**深度解析**：认证时 `DaoAuthenticationProvider` 调 `UserDetailsService.loadUserByUsername` 取用户，再用 `PasswordEncoder.matches` 校验。碳管家实现多租户 `UserDetailsService`，按 tenant_id + username 查询，避免跨租户查到他人账号。
+
+**易错点**：在 `UserDetailsService` 里做授权逻辑；用 `NoOpPasswordEncoder` 明文存储；`loadUserByUsername` 跨租户未隔离导致越权。
+
+#### 追问：
+- 追问1：PasswordEncoder 为何不能明文？
+  - **答**：明文库一旦泄露，所有账号直接暴露。必须用 BCrypt/Argon2 加盐哈希，即使同密码也产生不同摘要，且验证用常量时间比较防计时攻击。碳管家强制 BCrypt strength≥10。
+- 追问2：多租户下 UserDetailsService 如何防串号？
+  - **答**：查询必须带 tenant_id 约束，并对"用户不存在"统一返回匿名拒绝（避免借错误信息探测租户内账号存在性）。碳管家在网关层先解析 tenant_id，再透传隔离上下文给 UserService。
+
+### 15. 如何用 @PreAuthorize 实现方法级鉴权？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：Spring EL 方法安全，细粒度授权与 SpEL 表达式。
+
+**参考答案**：启用 `@EnableMethodSecurity` 后，在方法上标注 `@PreAuthorize("hasRole('ADMIN')")` 或 SpEL 表达式做前置鉴权；`@PostAuthorize` 做后置（基于返回结果）。表达式可用 `authentication`、`#参数` 校验资源归属，实现"当前用户只能操作自己的数据"等细粒度规则。
+
+**深度解析**：底层由 `AuthorizationManager` 与 AOP 拦截执行。SpEL 中 `#record.owner == authentication.name` 可防水平越权。碳管家配额服务用 `@PreAuthorize("hasAuthority('quota:write') and @tenantService.belongTo(#tenantId, authentication)")` 双重校验。
+
+**易错点**：只在前端隐藏按钮不做后端校验；SpEL 中用字符串拼接导致注入；误以为注解能替代 URL 层授权。
+
+#### 追问：
+- 追问1：方法级鉴权与 URL 鉴权有何关系？
+  - **答**：URL 鉴权（HttpSecurity authorizeHttpRequests）是粗粒度第一道闸；@PreAuthorize 是细粒度第二道闸，可基于方法参数与返回做判断。二者互补，关键资源应双层防护，避免单层被绕过。
+- 追问2：SpEL 表达式能否被注入？
+  - **答**：若把用户输入拼进 SpEL 字符串再解析，可能 SpEL 注入执行任意方法。务必用参数占位 `#var` 而非字符串拼接，且禁用 `T()` 调用危险类。碳管家禁止在注解中出现外部可控文本。
+
+### 16. 密码存储为何用 BCrypt/Argon2 而非 MD5 或明文？
+**重要度**：★★★★
+
+**难度**：★★
+
+**考点**：密码学哈希，加盐，抗彩虹表与暴力破解。
+
+**参考答案**：明文/MD5/两次 MD5 均不安全：MD5 快且已碰撞，可被彩虹表反向查表；无盐哈希同密码同摘要，便于批量破。BCrypt/Argon2 自带随机盐、自适应慢哈希（cost 可调），显著增加暴力破解成本，且每次哈希结果不同，抗彩虹表。
+
+**深度解析**：BCrypt 输出含 salt 与 cost 的 `\$2a\$10\$...` 格式，Spring `BCryptPasswordEncoder` 直接支持；Argon2 获 PHC 推荐、抗 GPU。官方文档建议弃用 MD5/SHA 系列做密码。碳管家注册/改密均用 BCrypt(strength=12)，并定期随硬件升级 cost。
+
+**易错点**：用 MD5+固定盐以为安全（盐固定仍可被针对）；把 cost 设过低或过高（过高压垮登录）；明文比对用 `==` 引发计时侧信道。
+
+#### 追问：
+- 追问1：两次 MD5 或 MD5+盐为什么仍不够？
+  - **答**：MD5 计算极快，攻击者每秒可试数十亿次，加盐仅防通用彩虹表，但针对单库仍可行暴力/字典。慢哈希的核心是提高单次成本，MD5 不具备该特性。
+- 追问2：密码泄露后如何止损？
+  - **答**：强制全部用户下次登录改密、作废 refresh token、审计异常登录。碳管家在疑似拖库时触发全局改密并临时降额，配合风控限流阻断撞库。
+
+### 17. 多租户场景下如何保证租户隔离与防越权？
+**重要度**：★★★★★
+
+**难度**：★★★
+
+**考点**：多租户安全架构，token 注入 tenant_id 与下游强制过滤。
+
+**参考答案**：网关统一认证后在 JWT 注入可信 `tenant_id`，下游服务解析后**强制**在每一条数据查询中附加 `WHERE tenant_id = ?`，不可依赖前端传参。授权层用 @PreAuthorize 校验资源归属。即使某服务漏判，也因 SQL 强制过滤无法跨租户读取，形成纵深防御。
+
+**深度解析**：碳管家 AI 助手为 SaaS 多租户，网关签发 JWT 含 tenant_id 与 role，MyBatis 拦截器/ JPA 过滤器自动拼接租户条件（行级隔离）。越权（水平：访问他人记录；垂直：普通用户调管理员接口）必须服务端校验，前端隐藏无效。
+
+**易错点**：用前端传入的 tenant 参数当隔离依据（可被篡改）；只在 Controller 校验而 DAO 层漏掉；把 tenant_id 只存线程变量不落查询。
+
+#### 追问：
+- 追问1：水平越权与垂直越权如何区分防护？
+  - **答**：水平越权是同级用户访问彼此资源（如 A 看 B 的碳报表），需校验 `record.ownerId == currentUser`；垂直越权是低权调高权接口（如用户删租户），需 `hasAuthority`。碳管家两者均在 @PreAuthorize 与 SQL 过滤双保险。
+- 追问2：下游服务如何信任网关注入的 tenant_id？
+  - **答**：tenant_id 来自网关 RSA 签名的 JWT，下游用公钥验签后视为可信，不可被客户端伪造。内部服务间调用也走 mTLS + 签名 token，避免内网横向越权，呼应零信任原则。
+
+
+---

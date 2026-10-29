@@ -15,19 +15,19 @@ const publicImg = join(publicDir, 'images')
 // 章节标题本身由 md 解析得到（见下方 chapters），这里只保留 slug 这一稳定标识。
 const slugs = [
   '17-system-design',           // 第一章：系统设计
-  '10-llm-fundamentals',        // 第二章：大模型基础与概念
-  '02-ai-model-integration',    // 第三章：AI模型集成与推理
-  '03-rag',                     // 第四章：RAG
-  '08-vector-db-embedding',     // 第五章：向量数据库与Embedding
-  '07-prompt-engineering',      // 第六章：Prompt工程
-  '04-spring-ai',               // 第七章：Spring AI
-  '05-langchain4j',             // 第八章：LangChain4j
-  '06-ai-agent',                // 第九章：AI Agent
-  '23-mcp',                     // 第十章：MCP协议
-  '38-ai-gateway',              // 第十一章：AI网关
-  '09-engineering-production',  // 第十二章：AI工程化与LLMOps（合并原engineering+llmops）
-  '25-multimodal-security',     // 第十三章：多模态AI与AI安全
-  '26-training-finetune',       // 第十四章：模型训练微调与评估
+  '06-ai-agent',                // 第二章：AI Agent（智能体）
+  '03-rag',                     // 第三章：RAG（检索增强生成）
+  '04-spring-ai',               // 第四章：Spring AI框架
+  '23-mcp',                     // 第五章：MCP协议与AI工具集成
+  '02-ai-model-integration',    // 第六章：AI模型集成与推理
+  '08-vector-db-embedding',     // 第七章：向量数据库与Embedding
+  '07-prompt-engineering',      // 第八章：Prompt工程
+  '05-langchain4j',             // 第九章：LangChain4j框架
+  '38-ai-gateway',              // 第十章：AI网关与多模型治理架构
+  '09-engineering-production',  // 第十一章：AI工程化与LLMOps（合并原engineering+llmops）
+  '25-multimodal-security',     // 第十二章：多模态AI与AI安全
+  '26-training-finetune',       // 第十三章：模型训练微调与评估
+  '10-llm-fundamentals',        // 第十四章：大模型基础与概念
   '01-java-basics',             // 第十五章：Java基础与分布式系统
   '33-jvm-gc',                  // 第十六章：JVM与GC
   '11-spring-ecosystem',        // 第十七章：Spring全家桶
@@ -53,16 +53,42 @@ const slugs = [
   'appendix-open-questions',    // 附录
 ]
 
-const text = readFileSync(src, 'utf-8')
-const lines = text.split('\n')
+// ── 源数据读取 ─────────────────────────────────────────────────────────
+// 主模式：源文档已按章拆分到 chapters/ 目录，每章一个 md，文件名形如 `NN-<语义名>.md`。
+//         按文件名排序后，第 i 个文件对应上面 slugs[i]（slug 决定 URL，与文件名解耦）。
+// 兼容模式：chapters/ 不存在时，回退读取单体文件 面试_带追问.md（旧行为，便于回滚）。
+const chaptersDir = join(root, 'chapters')
 const chapters = []
-let cur = null
-for (const line of lines) {
-  if (/^## /.test(line)) {
-    cur = { title: line.slice(3).trim(), lines: [] }
-    chapters.push(cur)
-  } else if (cur) {
-    cur.lines.push(line)
+
+if (existsSync(chaptersDir)) {
+  const files = readdirSync(chaptersDir)
+    .filter((f) => f.endsWith('.md'))
+    .sort() // 文件名带两位序号，字典序即章序
+  for (const f of files) {
+    const raw = readFileSync(join(chaptersDir, f), 'utf-8')
+    const chapterLines = raw.split('\n')
+    const head = chapterLines[0] ?? ''
+    if (!/^## /.test(head)) {
+      console.error(`[split] chapters/${f} 的第一行必须是 "## 章节标题"，实际是：${head.slice(0, 40)}`)
+      process.exit(1)
+    }
+    chapters.push({
+      title: head.slice(3).trim(),
+      lines: chapterLines.slice(1), // 与旧逻辑一致：不把 "## 标题" 行算进章内容
+      file: f,
+    })
+  }
+} else {
+  const text = readFileSync(src, 'utf-8')
+  const lines = text.split('\n')
+  let cur = null
+  for (const line of lines) {
+    if (/^## /.test(line)) {
+      cur = { title: line.slice(3).trim(), lines: [] }
+      chapters.push(cur)
+    } else if (cur) {
+      cur.lines.push(line)
+    }
   }
 }
 if (chapters.length !== slugs.length) {
@@ -218,7 +244,11 @@ for (let i = 0; i < chapters.length; i++) {
         const t = body[m]
         if (/^```/.test(t)) { innerCode = !innerCode; continue }
         if (innerCode) continue
-        if (/^###/.test(t) || /^## /.test(t)) break
+        // 只认真正的 H3（`### ` 后面跟空格）作为"下一题"边界。
+        // 旧写法 /^###/ 会同时匹配 `#### 追问：` 这类 H4，导致正文为
+        // 「代码块 + #### 追问：」结构的题目被误判为空分节而丢失
+        // （曾漏掉 LangChain4j 第 13/14/15 题共 3 道）。
+        if (/^###(?!#)/.test(t) || /^## /.test(t)) break
         if (t.trim()) { hasContent = true; break }
       }
       if (!hasContent) sectionAt.add(k)

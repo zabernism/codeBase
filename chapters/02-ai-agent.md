@@ -1,0 +1,2907 @@
+## 第二章：AI Agent（智能体）
+
+
+> 本章能力对应积木LCA云平台的 **Matrix 模块**（AI 自动建模 / 自动计算 / 自动填报）。Matrix 用 Agent 编排承载多步工具调用与人工审核节点，架构总览见[第一章第1题《积木LCA云平台 · 系统架构总览》](/17-system-design.html#q-1-1)图 3。
+
+### 1. 说说你的Agent怎么设计的？
+**重要度**：★★★★
+
+**碳法规追踪 Agent 设计**：
+
+**架构**：
+
+```
+用户/定时触发 → Planner（规划）→ Executor（执行）→ Reflector（反思）
+                                    ↓
+                          Tool 调用链（5 个核心工具）：
+                          1. fetchRegulation（抓取法规）
+                          2. parseDocument（解析文档）
+                          3. compareWithHistory（对比变更）
+                          4. updateKnowledgeBase（写入知识库）
+                          5. notifyUsers（通知用户）
+```
+
+**设计要点**：
+
+1. **角色定义**：System Prompt 定义 Agent 为"碳法规追踪专员"，明确职责边界。
+2. **工具集**：5 个核心工具（抓取→解析→比对→入库→通知），每个有清晰的描述和参数；"取源列表""生成报告"属编排步骤，不入工具集。
+3. **Memory**：Redis 存储任务状态、已处理法规列表（去重）。
+4. **规划策略**：Plan-and-Execute 模式，先制定执行计划再逐步执行。
+5. **安全约束**：工具调用最多5次，超时30s，失败重试2次后降级。
+6. **输出**：结构化报告（新增法规列表、变更摘要、影响分析）。
+
+#### 追问：
+- 追问1：Planner-Executor-Reflector 三段式里，如果 Executor 某一步的工具调用返回了与计划假设矛盾的数据（例如法规解析出的版本号与知识库已有记录冲突），Reflector 是靠规则还是靠大模型来判定"需要回退重规划"？
+  - **答**：以规则为主、模型为辅。版本号冲突这类可量化信号先用硬规则检测（对比知识库已有 version 字段），命中即触发重规划；无法用规则判定的"语义矛盾"才交给大模型做一致性校验。规则保证确定性与低延迟，模型只兜底模糊情形。
+- 追问2：碳法规追踪 Agent 的"工具调用最多5次、超时30s"这类硬约束，在真实抓取外部政府网站时经常不够，你如何在不破坏安全边界的前提下动态调整？
+  - **答**：硬约束设为默认基线，允许按 Tool/来源做策略覆盖——政府网站类来源配置更高超时（如 90s）与重试，但用"总预算"封顶（如总调用≤8 次、总时长≤120s）防失控；超基线时降级为分批抓取 + 断点续传，而非无限放宽。
+- 追问3：这个设计如果用在企业客户的"碳管家"私有化部署中，Planner 和 Reflector 两个 Agent 是共用同一个通义千问实例，还是拆成不同模型以控制成本？
+  - **答**：默认共用同一通义千问实例以省成本；Planner/Reflector 是轻量推理，可切更小参数模型（如 14B）独立部署，Executor 用主模型。是否拆分取决于客户预算与并发量，私有化小客户通常共用即可。
+
+### 2. ReAct循环怎么实现的？Agent的ReAct模式是什么？
+**重要度**：★★★★★
+
+**ReAct（Reasoning + Acting）模式**：大模型交替进行推理（Thought）和行动（Action），循环执行直到完成。
+
+**工作流程**：
+
+```
+用户输入
+  → Thought 1：分析问题，决定需要什么信息
+  → Action 1：调用 Tool 获取信息
+  → Observation 1：获取 Tool 返回结果
+  → Thought 2：基于结果继续推理
+  → Action 2：调用另一个 Tool
+  → Observation 2：获取结果
+  → ...
+  → Thought N：已有足够信息
+  → Final Answer：生成最终回答
+```
+
+**LangChain4j 实现**：`AiServices` + Tools 自动实现 ReAct 循环，大模型在每次调用后判断是否需要继续调用 Tool。
+
+**碳管家助手案例**：
+
+- 用户问："CBAM对钢铁出口企业有什么影响？如何计算碳关税？"
+- Thought 1：需要查询CBAM法规和钢铁碳排放因子。
+- Action 1：`getCbamRegulation()` 获取CBAM法规。
+- Observation 1：获得CBAM规则文本。
+- Thought 2：需要钢铁的碳排放因子来计算碳关税。
+- Action 2：`queryCarbonFactor("钢铁")` 获取因子。
+- Observation 2：钢铁碳排放因子 2.1 tCO2/t。
+- Thought 3：已有足够信息，可以生成回答。
+- Final Answer：综合CBAM规则和碳排放因子，回答影响和计算方法。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * ReAct = Reason + Act 交替循环：
+ * 1) 把工具定义随请求发给模型
+ * 2) 模型返回 tool_calls（Thought + Action）
+ * 3) 本地执行工具（Observation）
+ * 4) 工具结果作为 tool 消息回灌，模型再思考
+ * 5) 直到模型不再返回 tool_calls，输出 Final Answer
+ *
+ * ⚠️ 第 4 步是新手最常写错的地方：Observation 必须回灌成 tool 角色消息，
+ *    不能拼成字符串塞进 user。三个原因：
+ *    ① OpenAI / Anthropic 要求 assistant.tool_calls 与 tool.tool_call_id 严格配对，
+ *       缺一个就 400；
+ *    ② 拼成文本后，模型看到的是「用户告诉我工具返回了什么」，而不是「我调了工具」，
+ *       推理质量下降，也更容易重复调同一个工具；
+ *    ③ 每轮重建 prompt 会重复计费 system 段，并丢失原始对话的角色边界。
+ */
+@Component
+public class ReActAgent {
+
+    private final ChatClient chatClient;
+    private final List<ToolCallback> tools;
+
+    public ReActAgent(ChatClient.Builder builder, List<ToolCallback> tools) {
+        this.tools = tools;
+        this.chatClient = builder.build();
+    }
+
+    public String run(String question) {
+        // 整个循环共用一份消息列表，逐轮追加，绝不重建
+        List<Message> messages = new ArrayList<>();
+        messages.add(new SystemMessage("你是碳核算助手。需要外部数据时必须调用工具，不要凭空编造。"));
+        messages.add(new UserMessage(question));
+
+        for (int step = 0; step < 5; step++) {      // 最多 5 步，防死循环
+            ChatResponse response = chatClient.prompt(new Prompt(messages))
+                    .tools(tools.toArray(new ToolCallback[0]))
+                    .call()
+                    .chatResponse();
+
+            AssistantMessage assistant = response.getResult().getOutput();
+            messages.add(assistant);                // ← 必须先存：它带着 tool_calls
+
+            if (assistant.getToolCalls().isEmpty()) {   // 没有工具调用 = Final Answer
+                return assistant.getText();
+            }
+
+            // Observation 按 id 与 tool_call 一一配对
+            List<ToolResponseMessage.ToolResponse> observations = new ArrayList<>();
+            for (AssistantMessage.ToolCall call : assistant.getToolCalls()) {
+                observations.add(new ToolResponseMessage.ToolResponse(
+                        call.id(), call.name(), execute(call)));
+            }
+            messages.add(new ToolResponseMessage(observations));
+        }
+        return "已达到最大步数仍未得出结论";
+    }
+
+    private String execute(AssistantMessage.ToolCall call) {
+        for (ToolCallback cb : tools) {
+            if (cb.getToolDefinition().name().equals(call.name())) {
+                try {
+                    return cb.call(call.arguments());
+                } catch (Exception e) {
+                    // 异常也走 tool 消息回灌让模型自纠；不要把堆栈丢给模型
+                    return "{\"error\":\"" + e.getClass().getSimpleName() + "\"}";
+                }
+            }
+        }
+        return "{\"error\":\"unknown_tool:" + call.name() + "\"}";
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.agent;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * 2.0 的 ReAct：**不再手写 for-step 循环**——这与 1.0 是两种写法，不是同一段代码换注释。
+ * 1) ToolCallingAdvisor 由 ChatClient【自动注册】，"模型→工具→模型"的完整往返由它完成：
+ *    一次 call() 就是一整轮 ReAct，工具执行、结果按 tool_call_id 回灌、循环终止都在框架内部
+ * 2) 工具必须显式注册成 ToolCallback Bean（toolNames() 已移除），再用 defaultTools 挂到 ChatClient
+ * 3) 会话状态不再手工拼 messages：交给 MessageWindowChatMemory + ChatMemoryRepository
+ *    （生产用自研 Redis 实现或官方 JdbcChatMemoryRepository），按 conversationId 隔离
+ * 4) 只有需要"每一步人工审核 / 显式打印 Observation"时才退回手写循环，
+ *    此时必须关掉自动注册：AdvisorParams.toolCallingAdvisorAutoRegister(false)，
+ *    否则同一个有副作用的工具会被执行两次
+ */
+@Component
+public class ReActAgent {
+
+    private final ChatClient chatClient;
+
+    public ReActAgent(ChatClient.Builder builder,
+                      List<ToolCallback> tools,
+                      ChatMemoryRepository memoryRepository) {
+        ChatMemory memory = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(memoryRepository)   // Redis / JDBC 实现，重启不丢
+                .maxMessages(20)
+                .build();
+        this.chatClient = builder
+                .defaultTools(tools.toArray(new ToolCallback[0]))
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
+                .build();
+    }
+
+    public String run(String conversationId, String question) {
+        // 一次 call() = 完整 ReAct 循环：工具调用与结果回灌在 ToolCallingAdvisor 内部完成，
+        // 业务代码里看不到 Thought/Action/Observation，也不需要自己维护步数
+        return chatClient.prompt()
+                .user(question)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .call()
+                .content();
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent;
+
+import dev.langchain4j.agent.tool.P;
+import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
+import org.springframework.stereotype.Component;
+
+/**
+ * LangChain4j 1.x：没有内置 ReAct 编排器，但工具调用循环由框架自动完成——
+ * 模型返回工具调用时，AiServices 内部执行工具并回灌，直到模型给出最终答案。
+ * 要显式控制步数/观察结果，就自己实现 ToolExecutor 或用 Service 层循环
+ */
+@Component
+public class ReActAgent {
+
+    private final CarbonAssistant assistant;
+
+    public ReActAgent(ChatLanguageModel model) {
+        this.assistant = AiServices.builder(CarbonAssistant.class)
+                .chatModel(model)
+                .tools(new CarbonTools())     // 工具循环由框架接管
+                .build();
+    }
+
+    public String run(String question) {
+        return assistant.chat(question);
+    }
+
+    static class CarbonTools {
+        @Tool("按行业与活动名称查询碳排放因子")
+        String lookupFactor(@P("行业") String industry, @P("活动") String activity) {
+            return "钢铁-高炉炼铁: 1.89 tCO2e/t铁水";
+        }
+    }
+
+    interface CarbonAssistant {
+        @dev.langchain4j.service.SystemMessage(
+            "你是碳核算助手。需要外部数据时必须调用工具，不要凭空编造。")
+        @dev.langchain4j.service.UserMessage("{{it}}")
+        String chat(String message);
+    }
+}
+```
+
+#### 追问：
+- 追问1：LangChain4j 的 AiServices 自动驱动 ReAct 循环时，如果模型连续两轮返回了相同的 tool_calls 但 observation 没变化，框架层面有没有内置的循环检测，还是靠你自己在 Prompt 里约束？
+  - **答**：LangChain4j 的 AiServices 默认没有内置"相同 tool_calls + 无变化 observation"的循环检测，主要靠 Prompt 约束（如"若结果无变化请换思路"）与框架层调用次数上限兜底。生产上我会在 Executor 加一层"observation 去重 + 参数历史比对"，连续两次相同则强制换 Tool 或终止。
+- 追问2：在"CBAM 对钢铁出口影响"这个例子里，假如 queryCarbonFactor 返回空（该工艺无因子），ReAct 是靠大模型自己换思路，还是会陷入"重试同一工具"的死循环？
+  - **答**：不会自动换思路，模型可能重试同一 Tool。需在 Tool 返回里显式给结构化提示（如 {error:"无此工艺因子", suggestion:"可尝试近似工艺X"}），并在 Prompt 要求"空结果时必须换参数或明确告知无法计算"，同时用调用次数限制兜底防死循环。
+
+### 3. 记忆压缩用的什么算法？
+**重要度**：★★★★
+
+**记忆压缩策略**：
+
+1. **摘要压缩**：当对话轮数超过阈值（如5轮），用大模型对早期对话生成摘要：
+   ```
+   [之前对话摘要]：用户询问了碳足迹定义，助手解释了ISO 14067标准...
+   [最近2轮对话]：...
+   ```
+2. **Token 窗口控制**：`TokenWindowChatMemory` 按 token 数限制，超出时自动淘汰最早的消息。
+3. **关键信息保留**：使用 LLM 提取对话中的关键实体和数据（如产品名、碳排放值），即使丢弃原文也保留关键信息。
+
+#### 追问：
+- 追问1：摘要压缩用大模型生成早期对话摘要，如果早期对话里有一个碳排放数值（如 2.1 tCO2/t）恰好是后续计算的关键，摘要 LLM 把它"概括"丢了，你如何保证这类关键实体不被压缩掉？
+  - **答**：摘要前先做"关键信息抽取"——用正则/规则或 LLM 抽取数值、产品名、标准号等实体并标记"不可丢弃"，摘要时强制保留；或采用分层记忆，原文存 MySQL、摘要只作索引，关键数值始终从原文回填，不依赖摘要文本。
+- 追问2：TokenWindowChatMemory 按 token 淘汰最早消息时，碳管家这种多轮碳核算场景里，被淘汰的"中间计算步骤"如果后面用户追问"你刚才是怎么算出来的"，系统还能追溯吗？
+  - **答**：默认不能，Redis/Token 窗口淘汰后原文丢失。解决：把多轮核算的"计算步骤"作为结构化中间结果额外落库（MySQL 任务表），用户追问时从库检索步骤而非依赖上下文；摘要只淘汰闲聊，保留计算链路。
+
+### 4. 了解哪些Agent的架构模式？
+**重要度**：★★★★
+
+| 模式                   | 说明            | 适用场景      |
+| -------------------- | ------------- | --------- |
+| **ReAct**            | 推理+行动循环       | 通用问答、工具调用 |
+| **Plan-and-Execute** | 先规划再执行        | 复杂多步任务    |
+| **Reflection**       | 执行后反思纠错       | 高质量要求场景   |
+| **Multi-Agent**      | 多智能体协作        | 复杂系统设计    |
+| **Router**           | 路由到不同子Agent   | 多领域问答     |
+| **Supervisor**       | 主管分配任务给子Agent | 任务分解      |
+
+#### 追问：
+- 追问1：你列的 6 种模式里，碳管家"法规问答/碳排放计算/报告生成"实际混用了 Router+ReAct+Plan-and-Execute，当 Supervisor 把一个复杂任务拆给多个子 Agent 后，子 Agent 之间出现结果冲突（如法规 Agent 和计算 Agent 对口径理解不一致）时谁来仲裁？
+  - **答**：仲裁归 Supervisor。规则优先——先按预设口径优先级（如法规 Agent 权威 > 计算 Agent 默认）做硬规则裁决；规则判不了的分歧（语义级）再调一个大模型做裁判，并把裁决结论回写长期记忆，沉淀为可复用经验，避免反复仲裁。
+- 追问2：Reflection 模式强调执行后反思纠错，但通义千问这类模型在"自我评价"时往往倾向于认可自己刚才的输出，你如何避免 Reflection 变成形式主义？
+  - **答**：避免自检偏差靠"外部信号"做质量门禁——引用溯源是否命中知识库、数值是否在合理区间，而非纯靠模型自评；Reflection 用独立小模型且与生成模型解耦，并对照"原始要求 checklist"逐项核对；关键结论要求给出证据链。
+
+### 5. Function Calling的原理是什么？你怎么理解Tool Use？
+**重要度**：★★★★
+
+**Function Calling 原理**：
+
+1. 开发者将可用工具的名称、描述、参数 JSON Schema 注册到模型请求中。
+2. 大模型根据用户问题判断是否需要调用工具。
+3. 如果需要，模型返回 `tool_calls`（函数名 + 参数 JSON）。
+4. 框架（Spring AI / LangChain4j）执行对应函数，获取结果。
+5. 将结果以 `tool` 角色消息追加到对话。
+6. 再次调用大模型，模型基于工具结果生成最终回答。
+
+**Tool Use 的理解**：Tool 是给大模型"长手脚"的方式。大模型只有"大脑"（推理能力），通过 Tool 获得与外部世界交互的能力——查数据库、调API、执行计算。大模型不直接执行代码，而是"告诉"框架要调用什么工具、传什么参数，框架代为执行。
+
+#### 追问：
+- 追问1：Spring AI 和 LangChain4j 在把 Java 方法转成 JSON Schema 时，对复杂参数类型（如嵌套对象、枚举、泛型 List）的处理有什么差异，会不会出现 Schema 与真实方法签名不一致导致的调用失败？
+  - **答**：两者都基于方法签名+注解（Spring AI 的 @Tool / LangChain4j 的 @Tool+@P）自动生成 JSON Schema。差异在细节：LangChain4j 对枚举、泛型 List 描述更成熟，Spring AI 在嵌套对象上需靠 @Schema 注解补足。不一致风险主要来自泛型擦除与复杂嵌套，建议显式用注解声明类型，并加 Schema 单测防签名漂移导致调用失败。
+- 追问2：你说"大模型不直接执行代码，而是告诉框架调什么工具"——那如果通义千问返回的 tool_calls 参数在 JSON Schema 校验合法、但实际业务上不合理（如年份填了 2099），框架层有没有二次校验拦截？
+  - **答**：有。框架层在 Tool 执行前加一层"业务校验拦截器"——对年份范围、企业 ID 归属、枚举合法性等做校验，非法直接返回结构化 error 让模型修正，而非真正执行业务。这属于安全边界（参数校验 + 白名单）的一部分，不依赖模型自觉。
+
+### 6. 如果大模型返回的Function Call参数格式不对怎么办？
+**重要度**：★★★
+
+1. **JSON Schema 约束**：在工具描述中明确参数格式，大模型更容易生成正确格式。
+2. **容错解析**：用宽松 JSON 解析器（容忍尾逗号、单引号等）。
+3. **自动修复**：将解析错误信息反馈给大模型，让其重新生成（"参数格式错误：xxx，请重新生成"）。
+4. **默认值**：对可选参数设置默认值，解析失败时使用默认值。
+5. **重试限制**：最多重试2次，仍失败则降级为不使用工具。
+
+#### 追问：
+- 追问1：你提到"自动修复：把解析错误反馈给大模型让其重新生成"，但如果错误不是格式问题而是语义问题（参数合法但字段含义填反了，如把产品名填进了行业字段），这种反馈机制能发现吗？
+  - **答**：格式反馈机制发现不了语义填反。需加"语义校验"——Tool 执行前由校验器核对字段业务含义（如行业字段值不该是产品名），或用枚举约束收窄字段取值空间；也可用少量 few-shot 固化正确填法。校验失败返回 {error, suggestion} 让模型重填。
+- 追问2：在碳管家生产环境里，重试 2 次仍失败就"降级为不使用工具"，此时是直接用大模型裸答（可能编造碳排放数据）还是走兜底话术？这两种降级你更倾向哪种，为什么？
+  - **答**：倾向"兜底话术 + 转人工/工单"而非裸答。裸答会编造碳排放数据，合规场景风险高。降级返回"暂无可靠数据，建议联系专家"并触发工单；若业务允许再辅以"基于历史近似值的提示性结果"并明确标注"非精确值"。
+
+### 7. AI Agent岗位热度高机会多，为什么没有投递相关岗位？
+**重要度**：★★
+
+（此为个人职业规划问题，建议结合实际回答）
+
+参考回答：当前在易碳负责AI相关开发工作，Agent 是我重点实践的方向之一。我没有大量投递 Agent 专属岗位，是因为我更看重"Java后端 + AI"的综合岗位——这类岗位既能发挥我扎实的 Java 分布式系统能力，又能深耕 AI 工程化。纯 Agent 岗位偏重算法和模型，而我的优势在于工程落地。
+
+#### 追问：
+- 追问1：你说更看重"Java后端+AI"综合岗位，那在碳管家项目里，你觉得自己离"纯 Agent 算法岗"最大的能力差距具体在哪一块——是模型微调、强化学习，还是 Agent 评估体系搭建？
+  - **答**：最大差距在"模型微调与 Agent 评估体系搭建"。我的优势是工程落地（编排、RAG、工具链、部署），但缺少针对碳领域语料的 SFT/RLHF 经验与系统化的 Agent 评测基准（golden dataset + 自动打分）。算法模型本身由通义千问承担，我补的是工程侧。
+- 追问2：如果未来团队要招聘一个专门做多智能体编排的算法同学，你作为工程负责人最看重他具备什么能力，是你现在补全不了的？
+  - **答**：最看重"多智能体编排的可靠性设计"能力——包括任务分解正确性、失败重试/回滚、跨 Agent 状态一致性，以及 Agent 评估与可观测体系。这是我作为工程负责人能搭框架、但需要算法同学深做规划质量与评估指标的部分。
+
+### 8. 近期有没有做过AI相关实操，比如使用AI编码工具、调用大模型API？
+**重要度**：★★
+
+- 日常使用 AI 编码工具（Cursor / GitHub Copilot）辅助开发。
+- 碳管家助手项目中深度使用 Spring AI + LangChain4j 调用通义千问 API。
+- 使用 LangChain4j 搭建 RAG 知识库问答系统。
+- 使用 Function Calling 实现碳法规查询工具调用。
+- 使用 SSE 实现流式输出。
+
+#### 追问：
+- 追问1：你说用 LangChain4j 搭了 RAG 知识库，那在调用通义千问 API 时，你遇到过最棘手的一个工程问题是什么——是限流、超时、流式中断，还是返回内容不稳定？
+  - **答**：最棘手是"流式输出中断 + 通义千问返回不稳定"。表现为长回答 SSE 中途断流、或 tool_calls 偶发 JSON 不完整。解法：客户端断线重连续传、服务端对不完整 tool_calls 做容错解析+自动修复、并加超时与降级；限流用令牌桶+退避重试。
+- 追问2：用 AI 编码工具辅助开发碳管家时，有没有出现过它生成的 LangChain4j 调用代码在版本升级后 API 变更、导致整段不可用的情况，你是怎么兜底的？
+  - **答**：遇到过。兜底：一是锁 LangChain4j 大版本 + 依赖隔离，升级走灰度；二是把 AI 调用封装在适配层（AgentGateway），对上层屏蔽框架 API 差异，升级时只改适配层；三是 CI 加 ReAct 链路冒烟测试，版本变更即发现不兼容。
+
+### 9. 智能体里面的路由是怎么去理解的？
+**重要度**：★★★★
+
+**路由（Router）**：根据用户输入的意图，将请求分发到不同的处理链路。
+
+**碳管家助手的路由策略**：
+
+```
+用户输入 → 意图识别 → 
+  ├── 碳法规问答 → RAG + 碳法规知识库
+  ├── 碳排放计算 → Function Calling + 计算引擎
+  ├── 闲聊 → 纯大模型（无 RAG）
+  └── 平台使用帮助 → FAQ 检索
+```
+
+**路由方式**：
+
+1. **规则路由**：关键词匹配（"碳足迹""ISO"→法规问答）。
+2. **模型路由**：用小模型分类意图。
+3. **Embedding 路由**：计算用户输入与各路由描述的向量相似度。
+
+#### 追问：
+- 追问1：你列了规则路由、模型路由、Embedding 路由三种，碳管家真实用的是哪种或哪几种组合？如果"碳法规问答"和"平台使用帮助"两条链路在 Embedding 空间上靠得很近（都含"碳""查询"等词），会不会路由错乱？
+  - **答**：真实是"规则路由为主 + Embedding 路由兜底"。规则命中（关键词）直接走，规则未命中才走向量相似度。对靠得近的问题，用"领域标签 + 路由描述带上差异词（如'操作指引' vs '合规依据'）"拉开向量距离，并加意图分类小模型二选一。
+- 追问2：路由层一旦判错（把该走 RAG 的问答路由到闲聊纯大模型），用户得到编造的法规答案，这种"路由错误"在碳合规场景后果严重，你有没有路由置信度阈值和兜底机制？
+  - **答**：有。Embedding 相似度低于阈值（如 0.7）时不自动路由，转"澄清/走全链路 ReAct"或转人工；对高后果链路（如法规问答）阈值更严。路由错乱时退化到"RAG + 引用溯源"，答案必须带出处，无出处则提示不确定，避免裸答编造。
+
+### 10. 多轮会话的意图转换是怎么去分发的？多轮对话状态如何管理？
+**重要度**：★★★★
+
+**意图转换**：每轮对话都经过意图识别，如果意图变化则切换处理链路。
+
+**多轮状态管理**：
+
+- **会话状态**：Redis 存储会话上下文（sessionId → 消息列表 + 当前意图 + 槽位数据）。
+- **上下文窗口**：保留最近5轮原文 + 更早轮次的摘要。
+- **槽位填充**：多轮对话中收集必要信息（如产品名、年份），填满后触发执行。
+
+#### 追问：
+- 追问1：你说"每轮都做意图识别，意图变化就切换链路"，但如果用户上一轮在算钢铁碳足迹、这一轮说"那化工的呢"，系统是基于槽位继承（自动把范围带过来）还是完全重新识别？继承错了怎么办？
+  - **答**：基于槽位继承 + 显式覆盖。上一轮"钢铁"作为 scope 槽位带入本轮，本轮"化工"视为对该槽位覆盖更新。继承错了通过"用户本轮明确新实体即覆盖"与"每轮意图重识别仅继承同意图槽位"纠偏；跨意图（如从计算切到法规）不继承计算槽位。
+- 追问2：Redis 里存 sessionId→消息列表+当前意图+槽位，如果同一企业多个账号共用一个会话（SaaS 多人协作），这个状态模型会不会串号？
+  - **答**：会。状态应以"enterpriseId + userId + sessionId"三级维度隔离，而非仅 sessionId。共享协作会话需显式声明参与人并带权限校验；Redis Key 设计成 `chat:{enterpriseId}:{userId}:{sessionId}`，并在 Agent 链路用 ThreadLocal 注入租户/用户上下文防串。
+
+### 11. 会话上下文满了是怎么处理的？上下文窗口限制如何突破？
+**重要度**：★★★★
+
+**处理策略**：
+
+1. **摘要压缩**：超出窗口时，用 LLM 对早期对话生成摘要。
+2. **关键信息提取**：提取对话中的实体、数据、用户意图，以结构化形式保留。
+3. **分段处理**：超长文档拆分多段处理，结果合并。
+4. **外部存储**：将完整历史存入数据库，只在上下文中保留摘要 + 最近对话。
+5. **RAG 式记忆**：将历史对话向量化存入向量库，检索相关历史片段注入上下文。
+
+#### 追问：
+- 追问1：摘要压缩+RAG 式记忆双管齐下时，如果一个长对话里用户反复修改同一个产品的碳排放参数，向量库召回的历史片段会不会和最新摘要冲突，导致大模型用旧值回答？
+  - **答**：会冲突。解法：向量召回的历史片段带"时间戳 + 版本号"，合并时按时间衰减，最新摘要优先；关键实体（产品参数）存结构化"当前值"表，注入上下文时始终以当前值为准，历史向量仅作补充，避免旧值覆盖新值。
+- 追问2：你说的"分段处理超长文档"在碳管家场景具体指什么文档——是长达数百页的 LCA 报告 PDF 吗？分段后各段结论合并时如何保证口径一致？
+  - **答**：指数百页 LCA 报告 PDF。分段按章节/物料边界切，每段独立抽取后做"口径对齐"：用统一元数据（产品边界、功能单位、标准版本）标注每段，合并时校验各段功能单位与边界一致，不一致则告警而非直接拼接。
+
+### 12. MCP服务端是什么？ToolCalling工具这一块调用的是什么？服务是怎么提供工具给到大模型的？实时数据是怎么给到大模型调用的？
+**重要度**：★★★★
+
+**MCP（Model Context Protocol）**：Anthropic 提出的开放协议，标准化 AI 模型与外部工具/数据源的连接方式。类似 USB-C 统一了 AI 工具调用的接口。
+
+**Tool Calling 的本质**：
+
+- 将 Java 方法（或 API 接口）的签名和描述以 JSON Schema 格式注册到大模型。
+- 大模型理解工具的能力和参数要求，自主决定是否调用。
+
+**服务提供工具给大模型**：
+
+1. 定义 Tool 的 `@Tool` 注解（描述）和 `@P` 注解（参数描述）。
+2. 框架将 Tool 描述转为 JSON Schema 注册到模型请求。
+3. 大模型返回 tool_calls → 框架反射执行 Java 方法。
+
+**实时数据**：通过 Function Calling，大模型可以调用查询接口获取实时数据：
+
+- `queryRealtimeCarbonData(product)` → 查询数据库实时碳排放数据。
+- `getLatestRegulation(type)` → 查询最新法规。
+- 大模型不直接访问数据库，而是通过 Tool 间接获取。
+
+#### 追问：
+- 追问1：你提到 MCP 像"USB-C 统一接口"，但碳管家现在用的是 LangChain4j 的 @Tool 注解直接把 Java 方法注册给通义千问，并没有走 MCP 协议——你评估过把现有 Tool 改造成 MCP Server 的必要性吗，还是认为在当前私有化部署下 MCP 是过度设计？
+  - **答**：当前私有化部署下评估为"暂不引入 MCP"。现有 @Tool 直连已满足需求，MCP 价值在跨进程/跨平台复用 Tool，而我们是单体 Spring Boot 内聚，引入 MCP Server 反而增加运维与延迟。若未来要把 Tool 开放给外部系统或多语言客户端，再考虑改造成 MCP。
+- 追问2：实时数据通过 Function Calling 查库，但你强调"大模型不直接访问数据库，通过 Tool 间接获取"——那 Tool 返回的实时碳排放数据如果量级很大（某产品全年逐月数据），你怎么控制注入上下文的体量，避免撑爆窗口？
+  - **答**：Tool 返回做"聚合 + 裁剪"——如全年逐月数据不在上下文展开，只返回汇总（均值/峰值/同比）与必要月度摘要；原始明细存库，前端按需分页拉取。返回 JSON 控制在 ≤200 字，符合 Schema 精简原则，避免撑爆窗口。
+
+### 13. 有没有去做Agent的编排？
+**重要度**：★★★★
+
+**设计思路（口头表述）**：Agent 编排我用 **Plan-and-Execute** 模式（区别于 ReAct 的边想边做），分三个角色。**Planner** 先把任务拆成 7 步计划（获取列表→抓取→解析→对比→写入知识库→生成报告→通知），一次性规划全局；**Executor** 按计划逐步执行，每步调对应 Tool；**Reflector** 每步执行后检查质量，不合格重试或触发计划修订。关键设计：
+  - ① 用 Planner 做全局规划而非 ReAct 每步现想，长任务更稳
+  - ② "粗计划 + 逐步细化"，中途遇到意外（抓到新法规）由 Reflector 触发计划修订而非全盘重来
+  - ③ 每步 Tool 独立可重试，单步失败不拖垮全链路
+  - 一句话："Planner 规划全局、Executor 逐步执行、Reflector 质检纠偏"。
+
+**碳法规追踪 Agent 的编排**（基于 Plan-and-Execute 模式）：
+
+```
+[Planner Agent]
+  接收任务：追踪本月碳法规更新
+  生成计划（7 步 = 5 个工具 + 2 个编排步骤，工具清单与第 1 题同一套）：
+    Step 1: 获取法规列表（getSourceList，读源配置，非 Tool）
+    Step 2: 逐条抓取新法规（fetchRegulation）
+    Step 3: 解析文档内容（parseDocument）
+    Step 4: 对比变更（compareWithHistory）
+    Step 5: 写入知识库（updateKnowledgeBase）
+    Step 6: 生成报告（generateReport，本地模板渲染，非 Tool）
+    Step 7: 通知相关用户（notifyUsers）
+
+[Executor Agent]
+  按计划逐步执行，每步调用对应 Tool
+
+[Reflector Agent]
+  每步执行后检查结果质量，不合格则重试或调整计划
+```
+
+#### 追问：
+- 追问1：你这个 Plan-and-Execute 编排是一次性把 7 步计划全生成，还是每执行完一步再让 Planner 决定下一步？如果是前者，中途 fetchRegulation 抓到一条预料外的新法规，原计划里的 Step 顺序还需要调整吗？
+  - **答**：采用"粗计划 + 逐步细化"——先生成整体 7 步框架，每步执行前由 Planner 确认下一步细节。中途抓到意外新法规，Reflector 触发"计划修订"，把新法规插入对应位置并调整后续顺序，已完成的步骤结果保留复用，不重跑。
+- 追问2：Reflector 每步检查质量"不合格则重试或调整计划"，这个"不合格"的判定标准是什么——是规则（如返回为空就重试）还是另一个大模型做裁判？裁判模型本身出错怎么办？
+  - **答**：以规则为主（返回空/超时/格式错误即判不合格并重试），质量类（如内容是否合规）才交给模型裁判。裁判模型出错时，用"多裁判 + 置信度"或回退规则（如仅查关键字段非空），并设置裁判本身也有次数上限，防止裁判无限循环。
+- 追问3：updateKnowledgeBase 这一步如果失败（Milvus 向量写入超时），整个编排是回滚重来，还是跳过这步先出报告、后台异步补索引？在碳合规里索引缺失会导致后续检索答案过时，你怎么权衡？
+  - **答**：权衡后"跳过该步先出报告 + 后台异步补索引"。报告时效性强，索引缺失只影响后续检索新鲜度，可降级。失败写入死信队列（RabbitMQ）异步重试补索引；报告标注"法规知识库更新于 X 时刻"，保证用户知情，不回滚已完成的抓取解析。
+
+### 14. AI Agent与RPA/传统自动化脚本的核心区别是什么？
+**重要度**：★★★
+
+| 维度   | AI Agent  | RPA/传统脚本    |
+| ---- | --------- | ----------- |
+| 决策方式 | 大模型自主推理决策 | 预定义规则/流程    |
+| 灵活性  | 可处理非预期情况  | 只能处理预设场景    |
+| 理解能力 | 自然语言理解    | 无（基于正则/选择器） |
+| 适应性  | 输入变化时自动调整 | 输入变化即失败     |
+| 开发方式 | 描述目标+工具   | 编写每一步操作     |
+
+#### 追问：
+- 追问1：你说 Agent 能"处理非预期情况"，但碳管家抓政府法规网站时，网站改版导致选择器失效——这种"非预期"对 RPA 是致命的，对 Agent 就一定能自动适应吗，还是也需要人改 Tool？
+  - **答**：Agent 也不能"自动适应"选择器失效——它依赖 Tool 内的解析逻辑。非预期改版仍需人改 fetchRegulation/parseDocument 的解析规则。Agent 优势是把"选哪个 Tool、如何处理结果"交给模型推理，解析层改版仍是工程维护项，并非免维护。
+- 追问2：在你们的实际落地里，有没有哪些流程你反而选择了 RPA/固定脚本而非 Agent（比如高频、确定性强的数据校验），也就是说 Agent 并非银弹？
+  - **答**：有。高频、确定强的环节用固定脚本更稳：如定时拉取固定格式的企业上报数据做校验、格式转换、报表导出。Agent 适合非结构化/需推理场景（法规问答、LCA 计算），确定性批处理用脚本降成本、提可靠。
+
+### 15. Agent的Memory（记忆系统）如何设计？
+**重要度**：★★★★★
+
+**三层记忆架构**：
+
+| 层级   | 实现     | 内容        | 持久性        |
+| ---- | ------ | --------- | ---------- |
+| 短期记忆 | Redis  | 当前对话上下文   | 会话级（30min） |
+| 长期记忆 | MySQL  | 用户偏好、历史任务 | 永久         |
+| 知识记忆 | Milvus | 对话向量化存储   | 永久         |
+
+#### 追问：
+- 追问1：三层记忆里"知识记忆用 Milvus 存对话向量化"，这是把历史对话当 RAG 知识库用——那它和企业碳法规知识库（也是 Milvus）是同一个 Collection 还是分开？如果混在一起，用户闲聊的向量会不会污染法规检索？
+  - **答**：分开。对话向量（知识记忆）与碳法规知识库用不同 Collection，甚至不同租户 Partition。闲聊向量若混入法规库会污染检索，所以对话记忆单独存 `chat_history_{enterpriseId}`，检索时按用途分别召回再融合，避免互相污染。
+- 追问2：短期记忆 TTL 30min，但企业用户可能周一问了一半、周五才回来继续——30min 过期后会话上下文丢了，系统能靠长期记忆+知识记忆自动恢复出"上次算到哪了"吗？
+  - **答**：能部分恢复。短期记忆过期后，靠长期记忆（用户偏好/历史任务）重建基础上下文，知识记忆（Milvus 向量）检索"上次任务"相关片段辅助；但精确"算到哪一步"依赖长期记忆里落库的"任务进度"记录，否则只能从摘要重建大致上下文。
+- 追问3：你说长期记忆存 MySQL 用户偏好，如果某个用户先在网页端、后在 API 接入方式下提问，两套画像怎么合并，还是隔离？
+  - **答**：按 enterpriseId + userId 合并，不隔离。画像维度（行业、常用产品、语言）做字段级合并；若网页端与 API 端行为冲突，以最近一次交互意图为准，并用"渠道"标签区分来源供分析，确保同一用户跨渠道体验一致。
+
+### 16. 短期记忆和长期记忆分别如何实现？
+**重要度**：★★★★
+
+- **短期记忆**：Redis 存储 `sessionId → List<Message>`，TTL 30min。对话窗口限制最近5轮。
+- **长期记忆**：MySQL 存储用户画像（偏好语言、常用产品、行业）。每次对话开始时加载到上下文。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.memory;
+
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.stereotype.Component;
+
+/**
+ * 短期记忆 = 会话窗口（ChatMemory，进程内/DB，TTL 天级）
+ * 长期记忆 = 外部向量库 + 用户画像表（跨会话，永久）
+ */
+@Component
+public class CarbonMemoryService {
+
+    private final ChatMemory shortTerm;
+    private final LongTermMemoryStore longTerm;
+
+    public CarbonMemoryService(ChatMemoryRepository repository, LongTermMemoryStore longTerm) {
+        this.shortTerm = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(repository)
+                .maxMessages(20)
+                .build();
+        this.longTerm = longTerm;
+    }
+
+    /** 短期：读写会话窗口 */
+    public List<Message> recallRecent(String conversationId) {
+        return shortTerm.get(conversationId);
+    }
+
+    /** 长期：把用户偏好/历史结论写成向量存到 Milvus，跨会话可召回 */
+    public void remember(String userId, String fact) {
+        longTerm.save(userId, fact);
+    }
+
+    /** 召回：把长期记忆拼进上下文（注意别塞进 System Prompt） */
+    public String buildContext(String userId, String conversationId) {
+        StringBuilder sb = new StringBuilder();
+        for (Message m : recallRecent(conversationId)) {
+            sb.append(m.getText()).append('\n');
+        }
+        sb.append("\n[历史偏好]\n").append(longTerm.recall(userId, 5));
+        return sb.toString();
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+// 本段与 1.0 写法相同——2.0 的差异在依赖坐标与 Advisor 装配，不在这些 API
+package com.carbon.guard.agent.memory;
+
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.stereotype.Component;
+
+/**
+ * 2.0 变化：
+ * 1) conversationId 【必填】，没有默认值兜底
+ * 2) 官方提供 Redis 持久化：
+ *    spring-ai-autoconfigure-model-chat-memory-repository-redis
+ *    前缀 spring.ai.chat.memory.repository.redis.*
+ * 3) PromptChatMemoryAdvisor 已移除
+ */
+@Component
+public class CarbonMemoryService {
+
+    private final ChatMemory shortTerm;
+    private final LongTermMemoryStore longTerm;
+
+    public CarbonMemoryService(ChatMemoryRepository repository, LongTermMemoryStore longTerm) {
+        this.shortTerm = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(repository)
+                .maxMessages(20)
+                .build();
+        this.longTerm = longTerm;
+    }
+
+    public List<Message> recallRecent(String conversationId) {
+        return shortTerm.get(conversationId);
+    }
+
+    public void remember(String userId, String fact) {
+        longTerm.save(userId, fact);
+    }
+
+    public String buildContext(String userId, String conversationId) {
+        StringBuilder sb = new StringBuilder();
+        for (Message m : recallRecent(conversationId)) {
+            sb.append(m.getText()).append('\n');
+        }
+        sb.append("\n[历史偏好]\n").append(longTerm.recall(userId, 5));
+        return sb.toString();
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.memory;
+
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.MemoryId;
+import dev.langchain4j.service.V;
+import dev.langchain4j.store.memory.chat.ChatMemoryStore;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * LangChain4j：
+ * 短期记忆 = MessageWindowChatMemory（可挂 ChatMemoryStore 落 Redis）
+ * 长期记忆 = 自己接向量库（EmbeddingStore）+ 用户画像表，框架不内置
+ */
+@Component
+public class CarbonMemoryService {
+
+    private final CarbonAssistant assistant;
+    private final LongTermMemoryStore longTerm;
+
+    public CarbonMemoryService(ChatLanguageModel model, LongTermMemoryStore longTerm) {
+        this.longTerm = longTerm;
+        this.assistant = AiServices.builder(CarbonAssistant.class)
+                .chatModel(model)
+                .chatMemoryProvider(id -> MessageWindowChatMemory.builder()
+                        .id(id)
+                        .maxMessages(20)
+                        .build())
+                .build();
+    }
+
+    public String chat(String userId, String conversationId, String input) {
+        // 长期记忆拼进上下文（放 User 消息体，不进 System）
+        String ctx = longTerm.recall(userId, 5);
+        return assistant.chat(conversationId, ctx, input);
+    }
+
+    public void remember(String userId, String fact) {
+        longTerm.save(userId, fact);
+    }
+
+    interface CarbonAssistant {
+        @dev.langchain4j.service.UserMessage("{{context}}\n{{it}}")
+        // 会话隔离必须用 @MemoryId：@V 只做模板变量替换，chatMemoryProvider 拿不到会话 ID
+        String chat(@MemoryId String conversationId,
+                    @V("context") String context, String it);
+    }
+}
+```
+
+#### 追问：
+- 追问1：短期记忆用 Redis 存 List<Message> 限最近5轮，但碳核算多轮对话经常一轮就很长（用户贴一大段工艺描述），"5轮"是按消息条数还是按 token 算，超长单轮怎么处理？
+  - **答**：按"消息条数 + token 软上限"双重控制。5 轮是消息条数基线，单轮超长则按 token 预算截断/摘要该轮，避免一条消息撑爆窗口。超长单轮先入摘要，关键实体保留，原文转存 MySQL。
+- 追问2：长期记忆"每次对话开始加载到上下文"，如果用户有 200 条历史偏好，全量注入会撑爆上下文，你做了偏好筛选或摘要吗？
+  - **答**：不会全量注入。加载时做"相关性筛选"——仅注入与当前意图相关的偏好（如当前算钢铁就注入钢铁相关画像），或先生成"用户画像摘要"（≤200 字）再注入；必要时按槽位懒加载，控制 token 占用。
+
+### 17. 记忆压缩和摘要策略有哪些？
+**重要度**：★★★
+
+第 3 题讲的是压缩算法选型，这题讲落地参数与工程约束——**什么时候压、压成什么、预算怎么分、压坏了怎么退**。
+
+**1）触发时机看 token 水位，不看轮次**
+- 上下文用掉预算的 70% 触发（例：32K 窗口预留 4K 输出，有效输入 28K，18K 时触发）；
+- 轮次只做兜底（如 >20 轮强制压一次），因为一轮可能很长（用户贴整段工艺描述），按轮次算会误判。
+
+**2）摘要的 prompt 要有固定结构，否则每轮摘要风格漂移**
+- 固定四段：`已确认事实 / 用户约束与偏好 / 未决问题 / 引用过的数据与来源`，其余一律丢弃；
+- 用低成本模型（qwen-turbo / 14B）跑，temperature=0，输出限 300 token；
+- 做**增量合并**（旧摘要 + 本次丢弃的对话 → 新摘要），不全量重写，避免多轮摘要后信息漂移。
+
+**3）Token 预算按用途切块（32K 窗口示例）**
+
+| 用途 | 预算 | 说明 |
+|------|------|------|
+| System Prompt + 工具定义 | ≤ 2K | 工具多时靠渐进式披露压 |
+| 历史摘要 | ≤ 1K | 只放四段结构摘要 |
+| 最近 N 轮原文 | ≤ 12K | 保真区，摘要不替代原文 |
+| RAG 检索片段 | ≤ 6K | 超预算时最先裁这里 |
+| 输出预留 | 4K | 不可挪用 |
+
+超预算裁剪顺序：RAG 片段 → 早期原文 → 摘要。
+
+**4）不可丢弃标记 + 压缩后校验**
+- 数值（排放量、因子、年份）、法规编号、用户明确约束打 `pin` 标签，压缩时强制保留原文；
+- 摘要生成后做一次"关键实体回溯"：摘要里必须出现所有 pin 实体，缺了重试一次，仍缺则直接保留原文段落。
+
+**降级**：摘要模型超时/失败 → 退化为"滑窗截断 + pin 原文保留"，并在回答中提示"早期对话已压缩"；用户追问早期细节时从 MySQL 全量历史回捞原文重放，不硬编。
+
+#### 追问：
+- 追问1：你说按 token 水位 70% 触发摘要、轮次只做兜底，那如果摘要已经生成过一轮，第 6 轮用户又纠正了一个关键数值，新摘要会覆盖旧摘要里的错误吗，还是旧错会一路沉淀下去？
+  - **答**：新摘要应覆盖旧摘要错误。做法是摘要生成时以"当前最新值"为准，并把被纠正的关键实体标记最新版本；分层摘要向上聚合时同样用最新值覆盖。若实现不当旧错会沉淀——故关键数值走"结构化当前值表"而非仅靠文本摘要，从根上避免。
+- 追问2：Token 预算动态分配给摘要和原文，当预算见底优先保原文还是保摘要？在碳核算场景，保原文（具体数值）还是保摘要（脉络）更关键？
+  - **答**：碳核算场景优先保"原文/具体数值"。数值错一位影响结论，脉络丢了尚可重述。策略：预算紧张时保含关键数值的原文片段，摘要可进一步压缩；但被标记"不可丢弃"的实体无论如何保留。
+
+### 18. 多智能体（Multi-Agent）协作如何设计？
+**重要度**：★★★★
+
+**碳管家助手的多Agent协作场景**：
+
+- **Router Agent**：分析用户问题，分发到专业子Agent。
+- **法规Agent**：处理碳法规问答（RAG + 法规知识库）。
+- **计算Agent**：处理碳排放计算（Function Calling + 计算引擎）。
+- **报告Agent**：生成碳足迹报告（多步骤编排）。
+- **Supervisor Agent**：协调各子Agent，合并结果。
+
+**通信方式**：通过共享消息队列或直接调用，子Agent结果汇总到 Supervisor。
+
+#### 追问：
+- 追问1：子 Agent 结果汇总到 Supervisor，如果法规 Agent 和 计算 Agent 对同一问题给出了不一致的结论（如法规说适用 A 标准、计算用了 B 标准），Supervisor 靠什么规则裁决，还是再调一个大模型做仲裁？
+  - **答**：Supervisor 裁决。先套"口径优先级规则"（法规 Agent 的合规口径为权威），规则覆盖不到的调一个仲裁大模型对比两方证据链，裁决后把正确口径写回共享状态，避免后续再冲突。裁决结论可沉淀为经验。
+- 追问2：你说通信方式"共享消息队列或直接调用"，在碳管家 Spring Boot 服务里实际是进程内方法调用还是跨服务 MQ？如果是进程内，某个子 Agent 死循环会拖垮整个 JVM 吗？
+  - **答**：当前是进程内方法调用（同 JVM），延迟低。防死循环：每个子 Agent 调用套"超时 + 调用次数上限"，单 Agent 死循环会被超时熔断，不会拖垮整个 JVM；若未来拆微服务再用 MQ + 各自超时隔离。
+- 追问3：多个子 Agent 各自持有 Tool，会不会出现两个 Agent 同时写同一份企业知识库（Milvus）造成版本混乱，需要分布式锁吗？
+  - **答**：需要。对共享知识库写入加"按 enterpriseId 的分布式锁/乐观锁（版本号）"，且写入串行化或带向量版本标签；读多写少场景用写队列（RabbitMQ）串行落库，避免并发覆盖造成版本错乱。
+
+### 19. Agent的规划（Planning）能力如何实现？
+**重要度**：★★★★
+
+1. **LLM 驱动规划**：用大模型将复杂任务分解为子步骤。
+2. **Plan-and-Execute**：先生成完整计划，再逐步执行。
+3. **动态调整**：执行过程中如果发现计划不合理，重新规划。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.plan;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * Planning = Plan-and-Execute：
+ * 1) Planner：把复杂目标拆成有序子任务
+ * 2) Executor：逐步执行，每步可调工具
+ * 3) Reflector：失败或结果不符预期时重规划
+ */
+@Component
+public class PlanningAgent {
+
+    private final ChatClient chatClient;
+
+    public PlanningAgent(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /** 规划：让模型输出 JSON 步骤列表 */
+    public List<PlanStep> plan(String goal) {
+        String raw = chatClient.prompt()
+                .system("""
+                        你是任务规划器。把目标拆成 2-5 个可执行步骤，
+                        只输出 JSON 数组，每项形如：
+                        {"step":1,"action":"查询因子","desc":"..."}""")
+                .user(goal)
+                .call()
+                .content();
+        return new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue(raw, new com.fasterxml.jackson.core.type.TypeReference<List<PlanStep>>() {});
+    }
+
+    /** 执行：按步骤串行执行，每步结果回灌 */
+    public String execute(String goal) {
+        StringBuilder context = new StringBuilder(goal);
+        for (PlanStep step : plan(goal)) {
+            String result = chatClient.prompt()
+                    .system("你是执行器，只完成当前步骤，不要自行扩展范围。")
+                    .user(u -> u.text("目标：{goal}\n已完成：{done}\n当前步骤：{step}\n请执行并给出结论")
+                            .param("goal", goal)
+                            .param("done", context.toString())
+                            .param("step", step.desc()))
+                    .call()
+                    .content();
+            context.append("\n[步骤").append(step.step()).append("] ").append(result);
+        }
+        return context.toString();
+    }
+
+    public record PlanStep(int step, String action, String desc) {}
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.agent.plan;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * 2.0 变化：结构化输出有 StructuredOutputValidationAdvisor 自纠正，
+ * 规划步骤解析失败会自动重试，比手写重试稳
+ */
+@Component
+public class PlanningAgent {
+
+    private final ChatClient chatClient;
+
+    public PlanningAgent(ChatClient.Builder builder) {
+        this.chatClient = builder
+                .defaultAdvisors(new org.springframework.ai.chat.client.advisor.StructuredOutputValidationAdvisor())
+                .build();
+    }
+
+    public List<PlanStep> plan(String goal) {
+        return chatClient.prompt()
+                .system("你是任务规划器。把目标拆成 2-5 个可执行步骤。")
+                .user(goal)
+                .call()
+                .entity(new org.springframework.core.ParameterizedTypeReference<List<PlanStep>>() {});
+    }
+
+    public String execute(String goal) {
+        StringBuilder context = new StringBuilder(goal);
+        for (PlanStep step : plan(goal)) {
+            String result = chatClient.prompt()
+                    .system("你是执行器，只完成当前步骤。")
+                    .user(u -> u.text("目标：{goal}\n已完成：{done}\n当前步骤：{step}")
+                            .param("goal", goal).param("done", context.toString()).param("step", step.desc()))
+                    .call()
+                    .content();
+            context.append("\n[步骤").append(step.step()).append("] ").append(result);
+        }
+        return context.toString();
+    }
+
+    public record PlanStep(int step, String action, String desc) {}
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.plan;
+
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * LangChain4j：没有内置 Planner，用"结构化返回 POJO"实现规划，
+ * 让模型直接返回 List<PlanStep>，省掉手写 JSON 解析
+ */
+@Component
+public class PlanningAgent {
+
+    private final Planner planner;
+    private final Executor executor;
+
+    public PlanningAgent(ChatLanguageModel model) {
+        this.planner = AiServices.builder(Planner.class).chatModel(model).build();
+        this.executor = AiServices.builder(Executor.class).chatModel(model).build();
+    }
+
+    public List<PlanStep> plan(String goal) {
+        return planner.plan(goal);
+    }
+
+    public String execute(String goal) {
+        StringBuilder context = new StringBuilder(goal);
+        for (PlanStep step : plan(goal)) {
+            String result = executor.run(goal, context.toString(), step.desc());
+            context.append("\n[步骤").append(step.step()).append("] ").append(result);
+        }
+        return context.toString();
+    }
+
+    interface Planner {
+        @dev.langchain4j.service.UserMessage("把目标拆成 2-5 个可执行步骤：{{it}}")
+        List<PlanStep> plan(String goal);
+    }
+
+    interface Executor {
+        @dev.langchain4j.service.UserMessage(
+            "目标：{{goal}}\n已完成：{{done}}\n当前步骤：{{step}}\n请执行并给出结论")
+        String run(@V("goal") String goal, @V("done") String done, @V("step") String step);
+    }
+
+    record PlanStep(int step, String action, String desc) {}
+}
+```
+
+#### 追问：
+- 追问1：你提到"执行中发现计划不合理就重新规划"，那重新规划是由原 Planner 大模型发起，还是由 Reflector 触发？重新规划产生的新旧计划如何衔接、已执行步骤的结果怎么保留？
+  - **答**：由 Reflector 触发、原 Planner 执行重规划。衔接：保留已执行步骤结果到共享 State，新计划只重排/新增未完成步骤，已完成步骤结果直接复用，不重跑；通过步骤 ID 关联新旧计划，保证可追溯。
+- 追问2：通义千问做任务分解时，如果出现"幻觉式步骤"（计划里出现一个根本不存在的 Tool 名），是在计划生成阶段就校验，还是执行到那步才报错？
+  - **答**：计划生成阶段就校验。用"工具白名单"核对计划里出现的 Tool 名是否真实存在，未知 Tool 名直接拦截并提示模型修正；也可在 Planner 的 System Prompt 列出可用 Tool 清单，缩小幻觉空间。
+
+### 20. Plan-and-Execute模式是什么？
+**重要度**：★★★★
+
+```
+Planner（大模型）→ 生成步骤列表
+  Step 1: ...
+  Step 2: ...
+  Step 3: ...
+
+Executor（大模型 + Tools）→ 逐步执行
+  执行 Step 1 → 结果
+  执行 Step 2 → 结果（可能触发重新规划）
+  ...
+```
+
+与 ReAct 的区别：ReAct 是边推理边行动（每步都可能调整），Plan-and-Execute 是先整体规划再执行（适合确定性较高的任务）。
+
+#### 追问：
+- 追问1：你说它"适合确定性较高的任务"，但碳管家抓法规这事儿确定性并不高（网站结构、返回内容都变）——你为什么仍选 Plan-and-Execute 而不是纯 ReAct？
+  - **答**：选它因为"抓法规"本质是可枚举的多步流程（列源→抓→解析→比对→入库），只是每步内部有不确定，由 Executor 的 ReAct + 重试吸收。Plan-and-Execute 提供整体可控与可观测，比纯 ReAct 更易审计和断点续跑；中途不确定由 Reflector 触发局部重规划。
+- 追问2：Plan-and-Execute 先整体规划再执行，如果 Step 3 执行失败需要回退到 Step 1 重来，已产生的 Step 1/2 副作用（如已写入的临时数据）怎么清理？
+  - **答**：用"补偿事务/步骤幂等"处理。每步副作用（临时数据）带步骤 ID 标记，回退到 Step 1 时对已写入临时数据做清理或覆盖（幂等写）；关键写（如 Milvus 入库）放最后一步，前面仅写临时区，回退时丢弃临时区即可，降低清理成本。
+
+### 21. Agent的反思（Reflection）和自我纠错机制如何实现？
+**重要度**：★★★★
+
+1. **执行后检查**：每个 Tool 调用后，用大模型检查结果是否合理。
+2. **错误修正**：发现错误时，调整参数重新调用。
+3. **质量评估**：最终回答生成后，用大模型评估回答质量，不达标则重新生成。
+4. **经验积累**：将成功/失败的经验存入长期记忆，未来遇到类似任务时参考。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.reflect;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * Reflection = 生成 → 自检 → 修正 三段：
+ * 1) 生成初答
+ * 2) 换独立角色/独立会话让模型挑错——审查当然要看初答，但不复用生成阶段的上下文与提示
+ * 3) 有问题则带错误信息重生成，最多 N 轮
+ */
+@Component
+public class ReflectionAgent {
+
+    private final ChatClient chatClient;
+
+    public ReflectionAgent(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    public String answer(String question, int maxRounds) {
+        String draft = chatClient.prompt()
+                .system("你是碳核算助手。")
+                .user(question)
+                .call()
+                .content();
+
+        for (int i = 0; i < maxRounds; i++) {
+            // 关键：把初答 draft 作为待审对象传给审稿模型，只让它挑错、不让它重写
+            String critique = chatClient.prompt()
+                    .system("""
+                            你是严格的审稿人。找出答案中的事实错误、数值错误、逻辑断裂。
+                            只输出问题清单，没有问题就输出 OK。""")
+                    .user(u -> u.text("问题：{q}\n待审内容：{a}")
+                            .param("q", question).param("a", draft))
+                    .call()
+                    .content();
+
+            if ("OK".equals(critique.trim())) {
+                return draft;
+            }
+            draft = chatClient.prompt()
+                    .system("你是碳核算助手。根据审稿意见修正答案，保留正确部分。")
+                    .user(u -> u.text("问题：{q}\n原答案：{a}\n审稿意见：{c}\n请给出修正后的完整答案")
+                            .param("q", question).param("a", draft).param("c", critique))
+                    .call()
+                    .content();
+        }
+        return draft;
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+// 本段与 1.0 写法相同——2.0 的差异在依赖坐标与 Advisor 装配，不在这些 API
+package com.carbon.guard.agent.reflect;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * 2.0 变化：
+ * 1) 结构化输出有 StructuredOutputValidationAdvisor 自纠正（针对格式而非事实）
+ * 2) 工具调用由 ToolCallingAdvisor 自动完成，审查环节也能调工具核对因子
+ */
+@Component
+public class ReflectionAgent {
+
+    private final ChatClient chatClient;
+
+    public ReflectionAgent(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    public String answer(String question, int maxRounds) {
+        String draft = chatClient.prompt()
+                .system("你是碳核算助手。")
+                .user(question)
+                .call()
+                .content();
+
+        for (int i = 0; i < maxRounds; i++) {
+            String critique = chatClient.prompt()
+                    .system("""
+                            你是严格的审稿人。找出答案中的事实错误、数值错误、逻辑断裂。
+                            只输出问题清单，没有问题就输出 OK。""")
+                    .user(u -> u.text("问题：{q}\n待审内容：{a}")
+                            .param("q", question).param("a", draft))
+                    .call()
+                    .content();
+
+            if ("OK".equals(critique.trim())) {
+                return draft;
+            }
+            draft = chatClient.prompt()
+                    .system("你是碳核算助手。根据审稿意见修正答案。")
+                    .user(u -> u.text("问题：{q}\n原答案：{a}\n审稿意见：{c}\n请给出修正后的完整答案")
+                            .param("q", question).param("a", draft).param("c", critique))
+                    .call()
+                .content();
+        }
+        return draft;
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.reflect;
+
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.V;
+import org.springframework.stereotype.Component;
+
+/**
+ * LangChain4j：同样用"多角色 + 循环"实现反思，
+ * 好处是两个角色是独立接口，提示词天然隔离
+ */
+@Component
+public class ReflectionAgent {
+
+    private final Drafter drafter;
+    private final Reviewer reviewer;
+    private final Reviser reviser;
+
+    public ReflectionAgent(ChatLanguageModel model) {
+        this.drafter = AiServices.builder(Drafter.class).chatModel(model).build();
+        this.reviewer = AiServices.builder(Reviewer.class).chatModel(model).build();
+        this.reviser = AiServices.builder(Reviser.class).chatModel(model).build();
+    }
+
+    public String answer(String question, int maxRounds) {
+        String draft = drafter.draft(question);
+        for (int i = 0; i < maxRounds; i++) {
+            String critique = reviewer.review(question, draft);
+            if ("OK".equals(critique.trim())) {
+                return draft;
+            }
+            draft = reviser.revise(question, draft, critique);
+        }
+        return draft;
+    }
+
+    interface Drafter {
+        @dev.langchain4j.service.SystemMessage("你是碳核算助手。")
+        @dev.langchain4j.service.UserMessage("{{it}}")
+        String draft(String question);
+    }
+
+    interface Reviewer {
+        @dev.langchain4j.service.SystemMessage(
+            "你是严格的审稿人。找出事实错误、数值错误、逻辑断裂。只输出问题清单，没有问题输出 OK。")
+        @dev.langchain4j.service.UserMessage("问题：{{q}}\n待审内容：{{a}}")
+        String review(@V("q") String q, @V("a") String a);
+    }
+
+    interface Reviser {
+        @dev.langchain4j.service.SystemMessage("你是碳核算助手。根据审稿意见修正答案。")
+        @dev.langchain4j.service.UserMessage("问题：{{q}}\n原答案：{{a}}\n审稿意见：{{c}}")
+        String revise(@V("q") String q, @V("a") String a, @V("c") String c);
+    }
+}
+```
+
+#### 追问：
+- 追问1：最终回答生成后用大模型评估质量"不达标则重新生成"，但通义千问给自己的回答打分会普遍偏高（self-preference bias），你用什么外部信号（如引用溯源、数值校验）来辅助质量门禁？
+  - **答**：不靠模型自评分数，用外部信号：引用溯源（答案引用的法规/因子是否真在知识库命中）、数值区间校验（碳排放值是否在物理合理范围）、关键字段非空。这些做硬门禁，不达标才触发重生成，self-preference bias 被外部校验中和。
+- 追问2：你把"成功/失败经验存入长期记忆"——经验以什么粒度存？是存"某 Tool 在某场景易失败"这类模式，还是整段对话？检索时如何避免过期经验误导新任务？
+  - **答**：以"模式级"存（如"某 Tool 在某场景易超时，建议重试前加退避"），不存整段对话。防过期：经验带"适用条件 + 有效期/版本号"，检索时按当前模型版本与场景过滤，命中率低或版本不符的经验不启用；定期由人工/评测回检。
+
+### 22. 如何保证Agent执行的安全性？
+**重要度**：★★★★
+
+1. **工具白名单**：只暴露必要的 Tool，敏感操作（删除/写入）需二次确认。
+2. **参数校验**：对 Tool 参数做严格校验（如产品名只允许字母数字）。
+3. **调用次数限制**：最多5次 Tool 调用，防止死循环。
+4. **超时控制**：总执行时间限制 60s。
+5. **沙箱执行**：Tool 在受限环境执行，无直接数据库写权限（需通过 Service 层）。
+6. **审计日志**：记录每次 Agent 执行的完整链路（Thought→Action→Result）。
+
+#### 追问：
+- 追问1：你列了"敏感操作需二次确认"，但碳管家里 Agent 自动跑法规追踪是定时无人值守的——这种无人场景下的写入（updateKnowledgeBase、notifyUsers）无法做人工二次确认，靠什么保证不越权？
+  - **答**：无人场景靠"最小权限 + 自动化审批策略"替代人工确认：Tool 只在白名单内、写入走 Service 层并带租户隔离；敏感写按预设规则自动执行，但触发审计日志 + 异常告警，关键操作可设"灰度开关"，异常时自动暂停并通知运维。
+- 追问2：工具白名单+沙箱"无直接数据库写权限，需通过 Service 层"——那 Service 层本身如果被 Agent 调用的 Tool 滥用（如一次批量更新全企业数据），白名单够不够，要不要按租户做行级权限？
+  - **答**：白名单不够。需按租户做行级权限：Tool 调用在 Service 层自动注入 enterpriseId 过滤，批量更新限制在本租户数据内；并对写操作做"影响行数上限"校验，超阈值拦截并告警，防止一次更新全企业数据。
+- 追问3：调用次数限制最多5次、超时60s，这是全局硬阈值还是按 Tool 类型区分（如检索类宽松、写类严格）？碳核算里复杂 LCA 计算可能本身就超过5步，这个阈值会不会误杀正常任务？
+  - **答**：按 Tool 类型区分更合理。检索类宽松（如最多 8 次）、写类严格（如 3 次）；复杂 LCA 计算本就可能超 5 步，故对该类任务提高上限或用"计划步数"作上限基准，而非一刀切全局 5 次，避免误杀正常任务。
+
+### 23. Agent的工具调用失败时如何处理？
+**重要度**：★★★★
+
+1. **重试**：指数退避重试（最多2次）。
+2. **降级**：换备选工具或简化处理。
+3. **反馈给大模型**：将错误信息反馈给大模型，让其选择其他策略。
+4. **兜底**：所有重试失败后返回"当前无法完成此操作，建议人工处理"。
+
+#### 追问：
+- 追问1：指数退避重试最多2次，但有些失败是"瞬时网络抖动"值得重试，有些是"参数永远不对"不该重试——你区分了这两类失败吗，还是无差别重试浪费一轮？
+  - **答**：区分。用异常分类：网络超时/5xx 等瞬时错才指数退避重试；参数错误/4xx 等业务错直接判失败不重试（重试也是同样错）。重试前记录失败类型到审计日志，避免无差别重试浪费轮次。
+- 追问2：兜底"返回建议人工处理"，在碳管家 SaaS 里这个兜底会触发工单系统还是仅仅话术返回？如果同一工具反复兜底，有没有熔断防止持续无效调用？
+  - **答**：兜底会触发工单系统（创建待人工处理工单）而非仅话术。同一工具反复兜底时启用熔断：短期（如 5 分钟）内对该 Tool 直接走兜底、不再调用，防止持续无效调用浪费算力；熔断恢复后试探性重试。
+
+### 24. 如何评估Agent的执行效果？
+**重要度**：★★★★
+
+1. **任务完成率**：成功完成的任务占比。
+2. **工具调用准确率**：调用了正确的工具、传了正确的参数。
+3. **执行步数**：完成任务的平均步数（越少越好）。
+4. **耗时**：从任务开始到完成的总时间。
+5. **用户满意度**：点赞/点踩比例。
+6. **人工评估**：专家对 Agent 行为链路的评分。
+
+#### 追问：
+- 追问1：你列了任务完成率、工具准确率、步数、耗时、满意度——但"任务完成率"在碳核算场景怎么客观判定？用户没点踩不代表答案对，你有没有用黄金数据集做自动化评测？
+  - **答**：用"黄金数据集 + 自动评测"。沉淀典型碳问答/计算题的标准答案，Agent 输出与标准答案做结构化比对（数值误差范围、引用是否正确）；同时用"引用溯源命中率"作客观完成信号，不只看用户是否点踩。
+- 追问2：人工评估"专家对行为链路评分"成本高，碳管家有没有沉淀出可复用的评测集（如 100 道典型碳问答题+标准答案），还是每次上线靠肉眼抽查？
+  - **答**：已沉淀可复用评测集（如百道典型碳题 + 标准答案 + 评分 rubric），每次上线跑自动化回归评测，算完成率/准确率；人工评估只用于抽样复核和难例，不靠肉眼全查，保证可持续评估。
+
+### 25. Agent的流式输出如何实现？
+**重要度**：★★★
+
+流式输出要分两路看：**最终答案的增量 token** 走框架原生的 token 流（`.stream().content()`），这是下面示例演示的部分；**Thought / Action / Observation 不是 token 流**——模型在一次调用里就把 tool_calls 一次性返回，中间步骤得在 ReAct 循环里由业务代码另发自定义 SSE 事件（`event: thought` / `action` / `observation`），前端按 `event` 字段渲染"思考过程"，两种事件共用同一条 SSE 连接。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.stream;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * 1.0：ChatClient.prompt().stream().content() 返回 Flux<String>，
+ * 转成 SSE 推给前端；注意背压与超时
+ */
+@Controller
+public class AgentStreamController {
+
+    private final ChatClient chatClient;
+
+    public AgentStreamController(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    @PostMapping(value = "/ai/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@RequestParam String question) {
+        SseEmitter emitter = new SseEmitter(120_000L);
+        AtomicLong seq = new AtomicLong();
+
+        chatClient.prompt()
+                .system("你是碳核算助手")
+                .user(question)
+                .stream()
+                .content()
+                .subscribe(token -> {
+                    try {
+                        emitter.send(SseEmitter.event().id(String.valueOf(seq.incrementAndGet())).data(token));
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                },
+                emitter::completeWithError,
+                emitter::complete);
+
+        return emitter;
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.agent.stream;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * 2.0：流式 API 不变（.stream().content() 仍返回 Flux<String>），
+ * 主要变化是 ToolCallingAdvisor 自动注册，工具调用过程也能进流式响应
+ * 本段与 1.0 写法相同——2.0 的差异在依赖坐标与 Advisor 装配，不在这些 API
+ */
+@Controller
+public class AgentStreamController {
+
+    private final ChatClient chatClient;
+
+    public AgentStreamController(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    @PostMapping(value = "/ai/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@RequestParam String question) {
+        SseEmitter emitter = new SseEmitter(120_000L);
+        AtomicLong seq = new AtomicLong();
+
+        chatClient.prompt()
+                .system("你是碳核算助手")
+                .user(question)
+                .stream()
+                .content()
+                .subscribe(token -> {
+                    try {
+                        emitter.send(SseEmitter.event().id(String.valueOf(seq.incrementAndGet())).data(token));
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                },
+                emitter::completeWithError,
+                emitter::complete);
+
+        return emitter;
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.stream;
+
+import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * LangChain4j 1.x：StreamingChatModel + StreamingChatResponseHandler
+ * 回调式（onPartialResponse/onCompleteResponse/onError），比 Flux 更好接 SSE
+ * 注意：0.x 的 StreamingChatLanguageModel / StreamingResponseHandler 在 1.x 已移除
+ */
+@Controller
+public class AgentStreamController {
+
+    private final StreamingChatModel model;
+
+    public AgentStreamController(StreamingChatModel model) {
+        this.model = model;
+    }
+
+    @PostMapping(value = "/ai/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@RequestParam String question) {
+        SseEmitter emitter = new SseEmitter(120_000L);
+
+        model.chat(question, new StreamingChatResponseHandler() {
+            @Override
+            public void onPartialResponse(String partialResponse) {
+                try {
+                    emitter.send(SseEmitter.event().data(partialResponse));
+                } catch (Exception e) {
+                    emitter.completeWithError(e);
+                }
+            }
+
+            @Override
+            public void onCompleteResponse(ChatResponse response) {
+                emitter.complete();
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                emitter.completeWithError(error);
+            }
+        });
+
+        return emitter;
+    }
+}
+```
+
+#### 追问：
+- 追问1：你把 Thought/Action/Observation 通过 SSE 推给前端，但通义千问的 Function Calling 是"先想完再一次性返回 tool_calls"，中间 Thought 是真实可观测的还是你为了展示效果自己构造的？
+  - **答**：通义千问 Function Calling 是一次性返回 tool_calls，中间 Thought 不是真实逐字可观测的。我们做的是在 ReAct 循环里由框架记录每轮请求/响应并生成可读 Thought 标签（如"正在查询因子库"），对内可审计、对外展示，并非模型原生逐 token 的 Thought。
+- 追问2：SSE 长连接下如果用户中途断开（关浏览器），后端 Agent 还在继续执行计算，你怎么做取消（cancel）避免浪费算力？
+  - **答**：SSE 断开时服务端收到客户端关闭事件，触发"取消信号"。Agent 执行循环每步前检查取消标志（如 Redis flag / 响应式 cancel），检测到即中断并释放资源；用响应式/可中断执行模型（如 Project Reactor 的 dispose）避免无谓算力浪费。
+
+### 26. 如何设计Agent的人机交互界面？
+**重要度**：★★★
+
+1. **对话界面**：自然语言输入 + 流式输出显示。
+2. **思考过程可视化**：展示 Thought→Action→Observation 链路。
+3. **工具调用展示**：以卡片形式展示每个 Tool 的调用状态和结果。
+4. **人工介入**：关键步骤（如删除操作）弹出确认对话框。
+5. **进度展示**：多步骤任务的进度条。
+
+#### 追问：
+- 追问1：思考过程可视化展示 Thought→Action→Observation，但碳管家面向的是企业客户（可能不懂 Agent 术语），你是直接暴露这些技术链路，还是翻译成"正在查询法规库/已匹配排放因子"这类业务语言？
+  - **答**：面向企业客户做"业务语言翻译"，不直接暴露 Thought/Action 术语。映射为"正在查询法规库""已匹配排放因子""正在生成报告"等状态文案；技术链路仅在调试模式/管理员视图展示，兼顾透明与易理解。
+- 追问2：工具调用以卡片展示状态和结果，如果一次回答调用了 8 个 Tool，卡片刷屏会不会反而降低可读性，你做了折叠/聚合吗？
+  - **答**：做了聚合/折叠。多 Tool 调用按"阶段"分组（如"数据收集"组下含多个子调用），默认折叠只显摘要，展开看明细；超过 N 个（如 5）自动折叠，避免刷屏，关键信息（结果/耗时）置顶。
+- 追问3：关键步骤弹确认框（如删除），但流式输出是异步的，确认框和正在流式生成的内容如何协调，避免用户还没确认系统就继续往下跑了？
+  - **答**：关键步骤确认采用"暂停式"——流式输出到需确认的步骤先挂起（不发后续内容），弹出确认框，用户确认/取消后再继续或终止；用状态机管理"生成中/待确认/继续"，确保未确认不往下跑，避免竞态。
+
+### 27. Agent的Prompt工程有哪些技巧？
+**重要度**：★★★★
+
+1. **角色定义**：明确 Agent 身份和职责边界。
+2. **工具描述**：清晰描述每个工具的用途和参数含义。
+3. **约束条件**：明确禁止行为（如"不要编造数据"）。
+4. **Few-shot 示例**：提供正确的 Thought→Action 示例。
+5. **输出格式**：要求结构化输出（JSON/Markdown）。
+6. **分步指令**：复杂任务拆分为明确的步骤指令。
+
+#### 追问：
+- 追问1：你强调"工具描述清晰"和"Few-shot 示例"，但碳管家 Tool 多、Few-shot 占 token 多，你是怎么在 Prompt 长度和示例覆盖度之间权衡的，会不会因示例太多反而挤掉系统指令？
+  - **答**：控制示例数量，按需加载。仅对易错 Tool 配 few-shot，且示例存"检索式"——按当前可用 Tool 动态挑选相关示例注入，而非全量；系统指令始终前置且设最小 token 保障，示例超预算时优先保指令，避免被挤掉。
+- 追问2：约束"不要编造数据"在通义千问上可靠吗？当检索不到某产品的排放因子时，模型是真能拒答还是仍会编一个接近的数，你用什么机制兜底（如检索置信度门禁）？
+  - **答**：不靠 Prompt 硬约束保证。加"检索置信度门禁"——Tool 返回因子时带置信度/来源，低于阈值或为空时强制走"无法获取，请确认"话术，模型无因子可编；并在生成层校验答案是否都有出处，无出处结论被拦截或标注不确定。
+
+### 28. 如何让Agent具备长期记忆能力？
+**重要度**：★★★
+
+长期记忆不是"把对话全丢进向量库"，而是**分层存储 + 有选择的写入 + 带权重的召回 + 冲突覆盖与遗忘**四件事。
+
+**记忆分层**：
+
+| 层 | 内容 | 存储 | 生命周期 |
+|---|---|---|---|
+| 工作记忆（短期） | 当前会话最近 N 轮消息 | 进程内 `MessageWindowChatMemory`（按 token 窗口淘汰） | 会话结束即失效 |
+| 情景记忆（长期） | 一次任务的完整轨迹：诉求→工具调用→结论 | Milvus（摘要向量 + 元数据） | 90~180 天，按业务定 |
+| 语义记忆（长期） | 抽取出的稳定事实/偏好：所属行业、常用因子版本、报告口径偏好 | 关系库画像表 + 向量索引 | 长期，新值覆盖旧值 |
+
+**写入时机**（关键：不要每轮都写）：
+- 每轮只更新工作记忆；
+- 会话结束或每 8~10 轮，把增量对话用 LLM 摘要成一条情景记忆（"目标-动作-结果-结论"），带 `user_id / tenant_id / 时间戳 / 重要性分` 写入 Milvus；
+- 命中"稳定事实"（如"集团统一用 2023 版因子"）时，额外 upsert 一条语义记忆，同 `fact_key` 覆盖，不做增量堆叠。
+
+**召回打分**：
+- 候选：Milvus 按 `user_id/tenant_id` 过滤 + 相似度 topK（K=10~20）；
+- 重排：`score = α·余弦相似度 + β·时间衰减 + γ·重要性`，时间衰减用 `exp(-Δt/τ)`（τ≈30 天），重要性由写入时 LLM 打 0~1 分；
+- 预算：重排后只取 top 3~5 条拼进上下文，超 token 预算按分截断——记忆是"提示"不是"全文注入"。
+
+**冲突与遗忘**：
+- 版本化：语义记忆带 `fact_key + 生效日期`，同 key 只保留最新有效版本，旧版本标 `superseded` 留审计（解决"新政策覆盖旧因子"）；
+- 去重：写入前 embedding 相似度 > 0.95 判重，只更新访问时间与计数；
+- 衰减与 TTL：情景记忆到期归档冷存储，90 天未被召回（`last_hit`）的记忆持续降权直至清理，避免记忆污染；
+- 隔离：所有记忆必须带 `tenant_id` 且检索时强制过滤，防跨租户串忆（与多租户隔离同口径）。
+
+#### 追问：
+- 追问1：对话历史向量化存 Milvus、新对话时检索相关历史——但向量检索是"语义相似"不是"事实最新"，如果用户上周说"今年用 2023 因子"、这周政策更新用 2024，检索可能召回旧的那条，你怎么保证时效性优先于语义相似？
+  - **答**：检索时融合"时间衰减 + 语义相似"——近期记录加权更高，且对带"政策/版本/年份"等时效词的记忆做时间过滤（只召回最近有效版本）。当新政策覆盖旧因子时，用"版本号 + 生效日期"字段确保最新优先，语义相似让位时效。
+- 追问2：跨会话记忆和企业知识库都用 Milvus，检索时怎么区分"这是该用户的历史偏好"还是"这是公共法规知识"，权重怎么分配？
+  - **答**：检索时带"记忆类型"标签区分（user_history vs public_knowledge），按路由分别召回再加权融合；用户历史默认权重高于公共知识用于个性化，但合规口径以公共法规知识为准。权重可在 Prompt/融合层配置。
+
+### 29. Agent的推理链（Chain-of-Thought）如何实现？
+**重要度**：★★★
+
+- **显式 CoT**：在 Prompt 中要求大模型"请逐步思考"或"Let's think step by step"。
+- **结构化 CoT**：要求输出 `Thought: ... Action: ... Observation: ...` 格式。
+- LangChain4j 的 AiServices + Tools 自动实现 CoT 循环。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.cot;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * CoT 三种落法：
+ * 1) 少样本 CoT：提示里给"问题→分步推理→答案"的示例
+ * 2) 自问自答（Self-Ask）：让模型先提问自己再作答
+ * 3) 显式 scratchpad：把中间推理作为独立消息放进上下文
+ */
+@Component
+public class ChainOfThoughtAgent {
+
+    private final ChatClient chatClient;
+
+    public ChainOfThoughtAgent(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /** 少样本 CoT：示例里显式带推理步骤 */
+    public String answerWithFewShot(String question) {
+        return chatClient.prompt()
+                .system("""
+                        你是碳核算助手。回答前先分步推理，推理完再给结论。
+
+                        示例：
+                        问题：钢铁高炉工艺的排放因子是多少？
+                        推理：
+                        1) 明确边界：需要的是"高炉炼铁工序"的排放因子，不是粗钢综合强度
+                        2) 查标准：GB/T 32150.1 附录给高炉工序值
+                        3) 单位核对：tCO2e/t 铁水
+                        结论：1.89 tCO2e/t 铁水""")
+                .user(question)
+                .call()
+                .content();
+    }
+
+    /** 显式 scratchpad：把"思考"与"作答"拆成两轮调用 */
+    public String answerWithScratchpad(String question) {
+        String thought = chatClient.prompt()
+                .system("你是碳核算助手。先列出解题步骤，不要给最终答案。")
+                .user(question)
+                .call()
+                .content();
+
+        return chatClient.prompt()
+                .system("你是碳核算助手。基于给定步骤给出最终答案，不要重复推导过程。")
+                .user(u -> u.text("问题：{q}\n解题步骤：{t}\n请给最终答案")
+                        .param("q", question).param("t", thought))
+                .call()
+                .content();
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.agent.cot;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * 本段与 1.0 写法相同（逐行一致，仅一处 system 文案少了"不要重复推导过程"）——2.0 的差异在工具往返，
+ * 由 ChatClient 自动注册的 ToolCallingAdvisor 承担，不在 CoT 这些 API 上。
+ */
+@Component
+public class ChainOfThoughtAgent {
+
+    private final ChatClient chatClient;
+
+    public ChainOfThoughtAgent(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    public String answerWithFewShot(String question) {
+        return chatClient.prompt()
+                .system("""
+                        你是碳核算助手。回答前先分步推理，推理完再给结论。
+
+                        示例：
+                        问题：钢铁高炉工艺的排放因子是多少？
+                        推理：
+                        1) 明确边界：需要的是"高炉炼铁工序"的排放因子，不是粗钢综合强度
+                        2) 查标准：GB/T 32150.1 附录给高炉工序值
+                        3) 单位核对：tCO2e/t 铁水
+                        结论：1.89 tCO2e/t 铁水""")
+                .user(question)
+                .call()
+                .content();
+    }
+
+    public String answerWithScratchpad(String question) {
+        String thought = chatClient.prompt()
+                .system("你是碳核算助手。先列出解题步骤，不要给最终答案。")
+                .user(question)
+                .call()
+                .content();
+
+        return chatClient.prompt()
+                .system("你是碳核算助手。基于给定步骤给出最终答案。")
+                .user(u -> u.text("问题：{q}\n解题步骤：{t}\n请给最终答案")
+                        .param("q", question).param("t", thought))
+                .call()
+                .content();
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.cot;
+
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
+import org.springframework.stereotype.Component;
+
+/**
+ * LangChain4j：用"多轮消息"承载 scratchpad ——
+ * 第一轮要推理，第二轮只要结论，推理文本作为 User 消息回灌
+ */
+@Component
+public class ChainOfThoughtAgent {
+
+    private final Thinker thinker;
+    private final Answerer answerer;
+
+    public ChainOfThoughtAgent(ChatLanguageModel model) {
+        this.thinker = AiServices.builder(Thinker.class).chatModel(model).build();
+        this.answerer = AiServices.builder(Answerer.class).chatModel(model).build();
+    }
+
+    public String answer(String question) {
+        String thought = thinker.think(question);
+        return answerer.answer(question, thought);
+    }
+
+    interface Thinker {
+        @dev.langchain4j.service.SystemMessage("你是碳核算助手。先列出解题步骤，不要给最终答案。")
+        @dev.langchain4j.service.UserMessage("{{it}}")
+        String think(String question);
+    }
+
+    interface Answerer {
+        @dev.langchain4j.service.SystemMessage("你是碳核算助手。基于给定步骤给出最终答案。")
+        @dev.langchain4j.service.UserMessage("问题：{{q}}\n解题步骤：{{t}}\n请给最终答案")
+        String answer(@dev.langchain4j.service.V("q") String q,
+                      @dev.langchain4j.service.V("t") String t);
+    }
+}
+```
+
+#### 追问：
+- 追问1：你提到 LangChain4j 的 AiServices+Tools 自动实现 CoT 循环——那这个 CoT 是模型原生输出的中间思考（可审计），还是框架内部循环、对外只给最终答案，中间 Thought 其实不可见？
+  - **答**：LangChain4j AiServices+Tools 的 CoT 是框架内部循环，对外默认只给最终答案，中间 Thought 不可见。要可审计需在 Advisor/自定义循环中显式记录每轮请求响应，把中间推理以日志形式留存，才算真正的可审计 CoT。
+- 追问2：要求结构化输出 `Thought/Action/Observation` 格式时，如果模型偶尔不按格式输出（漏了 Observation 标签），你靠正则强解析还是让模型重生成？
+  - **答**：用"宽松解析 + 重生成"结合。优先正则尝试解析，标签缺失时用 LLM 补全/重生成；并在 Prompt 明确格式契约，配合 few-shot 降低漏标签概率。关键解析失败则把缺失信息反馈模型要求严格按格式重出。
+
+### 30. 如何避免Agent陷入死循环？
+**重要度**：★★★★
+
+1. **调用次数限制**：硬限制（如最多5次 Tool 调用）。
+2. **重复检测**：检测是否重复调用相同工具+相同参数，若是则终止。
+3. **超时控制**：总执行时间限制。
+4. **Token 限制**：单次对话的 token 消耗限制。
+5. **Plan 校验**：Planner 生成的计划中检查是否有循环依赖。
+
+#### 追问：
+- 追问1：重复检测"相同工具+相同参数则终止"——但如果模型每次换个不同但等价的参数（如 year=2024 然后 year=2023 再 2024）绕开检测，怎么办？
+  - **答**：单看"相同参数"不够，需加"语义去重"——对参数做归一化（如 year 排序、去等价变体）后比较，或对最近 K 次调用的"工具+归一化参数+observation 摘要"做相似度检测，连续高度相似即终止；也可限制同一 Tool 在窗口内的调用总次数。
+- 追问2：Plan 校验检查循环依赖，但纯 ReAct 模式没有显式 Plan，只能靠调用次数+超时兜底，这两者结合在碳管家真实场景够不够，有没有真实发生过死循环案例？
+  - **答**：调用次数 + 超时是底线，基本够用，但会"笨终止"而非优雅退出。真实场景偶发死循环（如模型反复重试空结果 Tool），靠次数上限兜底终止并转降级话术；更优是加"observation 无变化检测"提前终止，减少无效轮次。实际需结合监控告警捕捉。
+
+### 31. 如何实现Agent的个性化？
+**重要度**：★★★
+
+1. **用户画像**：存储用户行业（冶金/化工）、偏好语言、常用产品。
+2. **动态 Prompt**：根据用户画像调整 System Prompt（如"该用户来自冶金行业，请优先引用钢铁行业案例"）。
+3. **历史学习**：分析用户历史问答，学习常见问题模式，主动推荐相关知识。
+4. **回答风格**：根据用户偏好调整回答详细度（简洁/详细）。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.personalize;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.stereotype.Component;
+
+/**
+ * 个性化三层：
+ * 1) 画像注入（角色/行业/偏好）→ Advisor
+ * 2) 长期记忆（历史偏好向量）→ 召回后拼进 User 消息体
+ * 3) 语气/格式微调 → 按角色选不同 ChatClient 配置或不同 system prompt
+ */
+@Component
+public class PersonalizationAgent {
+
+    private final ChatClient chatClient;
+    private final UserProfileService profiles;
+    private final LongTermMemoryStore memory;
+
+    public PersonalizationAgent(ChatClient.Builder builder,
+                                UserProfileService profiles,
+                                LongTermMemoryStore memory,
+                                ChatMemory chatMemory) {
+        this.profiles = profiles;
+        this.memory = memory;
+        this.chatClient = builder
+                .defaultAdvisors(new MessageChatMemoryAdvisor(chatMemory))
+                .build();
+    }
+
+    public String chat(String userId, String conversationId, String question) {
+        UserProfile profile = profiles.get(userId);
+        String persona = "【用户画像】角色=%s，行业=%s，偏好=%s，权限=%s"
+                .formatted(profile.role(), profile.industry(),
+                          profile.outputStyle(), profile.accessScope());
+        // 长期记忆：召回历史偏好
+        String history = memory.recall(userId, 5);
+
+        return chatClient.prompt()
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .system("你是碳管家助手，遵守用户画像与权限边界。")
+                .user(u -> u.text("{persona}\n【历史偏好】\n{history}\n\n问题：{q}")
+                        .param("persona", persona)
+                        .param("history", history)
+                        .param("q", question))
+                .call()
+                .content();
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.agent.personalize;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.stereotype.Component;
+
+/**
+ * 2.0 变化：conversationId 必传；PromptChatMemoryAdvisor 已移除
+ */
+@Component
+public class PersonalizationAgent {
+
+    private final ChatClient chatClient;
+    private final UserProfileService profiles;
+    private final LongTermMemoryStore memory;
+
+    public PersonalizationAgent(ChatClient.Builder builder,
+                                UserProfileService profiles,
+                                LongTermMemoryStore memory,
+                                ChatMemory chatMemory) {
+        this.profiles = profiles;
+        this.memory = memory;
+        this.chatClient = builder
+                .defaultAdvisors(new MessageChatMemoryAdvisor(chatMemory))
+                .build();
+    }
+
+    public String chat(String userId, String conversationId, String question) {
+        UserProfile profile = profiles.get(userId);
+        String persona = "【用户画像】角色=%s，行业=%s，偏好=%s，权限=%s"
+                .formatted(profile.role(), profile.industry(),
+                          profile.outputStyle(), profile.accessScope());
+        String history = memory.recall(userId, 5);
+
+        return chatClient.prompt()
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .system("你是碳管家助手，遵守用户画像与权限边界。")
+                .user(u -> u.text("{persona}\n【历史偏好】\n{history}\n\n问题：{q}")
+                        .param("persona", persona)
+                        .param("history", history)
+                        .param("q", question))
+                .call()
+                .content();
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.personalize;
+
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.service.AiServices;
+import org.springframework.stereotype.Component;
+
+/**
+ * LangChain4j：个性化通过"按角色声明不同接口 + 各自 @SystemMessage"实现，
+ * 长期记忆自己接向量库
+ */
+@Component
+public class PersonalizationAgent {
+
+    private final UserProfileService profiles;
+    private final LongTermMemoryStore memory;
+    private final CarbonAssistant assistant;
+
+    public PersonalizationAgent(ChatLanguageModel model,
+                                UserProfileService profiles,
+                                LongTermMemoryStore memory) {
+        this.profiles = profiles;
+        this.memory = memory;
+        this.assistant = AiServices.builder(CarbonAssistant.class)
+                .chatModel(model)
+                .build();
+    }
+
+    public String chat(String userId, String question) {
+        UserProfile profile = profiles.get(userId);
+        String persona = "【用户画像】角色=%s，行业=%s，偏好=%s，权限=%s"
+                .formatted(profile.role(), profile.industry(),
+                          profile.outputStyle(), profile.accessScope());
+        String history = memory.recall(userId, 5);
+        return assistant.chat(persona, history, question);
+    }
+
+    interface CarbonAssistant {
+        @dev.langchain4j.service.SystemMessage("你是碳管家助手，遵守用户画像与权限边界。")
+        @dev.langchain4j.service.UserMessage("{{persona}}\n【历史偏好】\n{{history}}\n\n问题：{{it}}")
+        String chat(@dev.langchain4j.service.V("persona") String persona,
+                    @dev.langchain4j.service.V("history") String history, String it);
+    }
+}
+```
+
+#### 追问：
+- 追问1：动态 Prompt 按用户画像（如冶金行业优先引钢铁案例）注入——如果某用户跨行业（既问钢铁又问化工），画像冲突时 Prompt 怎么取，是合并还是按最近意图切换？
+  - **答**：按"最近意图优先 + 合并"处理。跨行业时 Prompt 注入双方相关画像但以当前轮意图行业为主（如本轮问化工则化工案例优先），历史行业作补充；不简单覆盖，用"意图标签"动态选择，避免静态画像冲突。
+- 追问2：历史学习"分析用户常见问题主动推荐"，这本身是另一个常驻 Agent 吗？它的计算结果（推荐内容）如果用户不点，会不会变成干扰？
+  - **答**：不是常驻 Agent，而是离线批处理任务（定时分析历史、产出推荐候选存库），对话时懒加载推荐。用户不点不强制推送，仅以"相关推荐"轻量呈现；推荐带 dismiss 反馈，点踩后降低该类推荐权重，避免干扰。
+
+### 32. Agent在企业级应用中的落地场景有哪些？
+**重要度**：★★★
+
+- **智能客服**：碳法规问答、平台使用指导。
+- **文档处理**：碳足迹报告自动生成、法规解析入库。
+- **数据查询助手**：自然语言查询碳排放数据、生成图表。
+- **流程自动化**：碳数据校验、异常告警、审批流程。
+- **知识管理**：内部知识库问答、新员工培训。
+
+#### 追问：
+- 追问1：你列了智能客服、文档处理、数据查询、流程自动化、知识管理——在碳管家实际已上线的是哪几个，哪些还停留在 PoC，差距主要在数据质量还是模型能力？
+  - **答**：已上线：智能客服（法规问答）、文档处理（报告生成/法规解析入库）、数据查询助手。PoC/灰度：流程自动化（数据校验告警）、知识管理（新员工培训）。差距主要在数据质量（因子库覆盖度）而非模型能力，部分场景因数据不全停留 PoC。
+- 追问2：流程自动化里"碳数据校验、异常告警"如果 Agent 判错（把正常数据判异常），会直接触发告警骚扰业务方，你有置信度阈值和人工复核门槛吗？
+  - **答**：有置信度阈值 + 人工复核门槛。Agent 判异常时输出置信度，低于阈值只记日志不告警；高于阈值但属"边界"的先入待复核队列，由业务方确认后再正式告警，避免误判直接骚扰；并设误报反馈回路优化阈值。
+
+### 33. 如何监控和调试Agent的行为？
+**重要度**：★★★★
+
+1. **全链路日志**：记录每次 Thought、Action、Observation、参数、返回结果。
+2. **可视化面板**：展示 Agent 执行的步骤链路图。
+3. **Trace ID**：每次 Agent 执行关联 Trace ID，可在日志系统中检索完整链路。
+4. **回放**：记录完整输入和中间结果，支持事后回放和调试。
+
+#### 追问：
+- 追问1：全链路日志记 Thought/Action/Observation，但通义千问的 Function Calling 实际只返回 tool_calls，中间 Thought 文本你是从哪抓的——是让模型额外输出推理文字，还是日志里其实只有 Action 没有真 Thought？
+  - **答**：通义千问 Function Calling 只返回 tool_calls，真实中间 Thought 文本需"让模型额外输出推理文字"（在 Prompt 要求先输出 reasoning 再给 tool_calls）或框架自行根据请求/响应构造可读标签。日志里若未要求额外输出，则只有 Action/Observation，无原生 Thought。
+- 追问2：Trace ID 关联一次执行，在碳管家多 Agent 协作（Supervisor 调子 Agent）场景，子 Agent 的 Trace 是继承父 Trace 还是各自生成，怎么串成一条完整链路？
+  - **答**：子 Agent 继承父 Trace（通过上下文透传 traceId/parentSpanId），用 MDC/ThreadLocal 传递；Supervisor 调用子 Agent 时把同一 traceId 注入子调用，各子步在同一链路下记录，最终在日志/APM（如 SkyWalking）串成完整树。
+- 追问3：回放功能依赖"记录完整输入和中间结果"，但如果回放时依赖的外部 Tool（如法规网站）内容已变，回放出的结果和当初不一致，这种"非确定性回放"还有排查价值吗？
+  - **答**：仍有价值。回放重点看"决策链路与参数"是否符合预期，而非结果完全一致；外部 Tool 变化导致的差异会被标注为"环境差异"。配合当时快照（入参/版本）可追溯，帮助定位是 Agent 逻辑问题还是数据源变化，仍有排查价值。
+
+### 34. Agent的成本如何控制？
+**重要度**：★★★★
+
+**先拆成本构成，再谈控制**。Agent 单次任务成本 ≈ 轮次 ×（输入 token × 单价 + 输出 token × 单价），放大项有四类：
+
+| 成本项 | 为什么贵 | 控制手段 |
+|---|---|---|
+| 输入 token 累积 | 每轮都要带上 system + 历史 + RAG 片段 + 工具 schema，轮次越多线性膨胀 | 上下文压缩（旧轮次摘要化）、只注入 top 3~5 检索片段、工具 schema 按需披露 |
+| 输出 token | CoT/推理链输出长，单价通常是输入的 2~4 倍 | 限 `max_tokens`、要求"先结论后理由"、结构化输出压掉冗余 |
+| 工具往返轮次 | 每多一轮工具调用就是一次完整 LLM 请求 | 合并工具、一次返回批量结果、设最大轮次上限 |
+| 重试与失败放大 | 格式错误重试、工具超时重试，成本直接翻倍 | 输出校验前置（结构化输出 + 自纠正只做一次）、重试上限 2 次 |
+
+**预算与止损**：
+- 按会话设 token 预算（如单次问答 8k 输入 / 1k 输出），超预算降级为"摘要 + 结论"模式；
+- 按租户设日/月额度，超限走队列降速或切小模型；
+- 成本打点：每轮记录 prompt/completion tokens 与轮次，按 `tenant_id/conversation_id` 上报 Micrometer，才能定位"哪类问题最烧钱"。
+
+**路由与批处理**：
+- 意图分流：闲聊/简单查询走小模型，复杂核算才上大模型，配合语义缓存命中直接返回；
+- 非实时任务（报告生成、批量核算）走批处理 + 离线队列，摊平高峰。
+
+补充：
+
+- **工具优先**：能用工具（精确查询）解决的不走大模型推理。
+- **小模型规划**：Planner 用小模型（快且便宜），Executor 用大模型（能力强）。
+- **缓存工具结果**：相同工具+参数的结果缓存。
+
+#### 追问：
+- 追问1：Planner 用小模型、Executor 用大模型——但小模型做任务分解如果分错了（漏步骤），Executor 大模型要花更多轮补救，总成本反而更高，你测过这个平衡点吗？
+  - **答**：测过平衡点。小模型（如 14B）做分解在多数标准任务上够用，漏步骤概率低；即便偶尔分错，Executor 大模型通过 ReAct 补步的成本仍低于全程用大模型规划。选"小模型规划 + 大模型执行"整体更省；极端复杂任务才升规划模型。
+- 追问2：缓存相同工具+参数结果，碳管家的实时数据 Tool（如 queryRealtimeCarbonData）本身就在变，缓存命中率是高还是低，会不会缓存了过期数据？
+  - **答**：实时数据 Tool 缓存命中率低（数据常变），故对这类 Tool 设短 TTL（如秒级）或禁用缓存，仅对"稳定类"（如法规文本、因子表）长缓存。缓存命中时返回带"数据时间"字段，前端显式标注时效，避免把过期值当实时。
+
+### 35. 如何设计Agent的降级方案？
+**重要度**：★★★★
+
+1. **工具降级**：主工具不可用时使用备选工具。
+2. **模型降级**：大模型不可用时切换小模型。
+3. **流程降级**：Agent 不可用时退化为关键词检索 + 预设回复。
+4. **人工兜底**：Agent 无法处理时转人工客服。
+
+#### 追问：
+- 追问1：流程降级"退化为关键词检索+预设回复"，但碳核算问题往往不是关键词能答的（如"化工园区范围二怎么核算"），这种降级其实答不准，你接受它给"不准确但安全"的兜底还是直接转人工？
+  - **答**：这类问题不接受"不准确但安全"的兜底话术。倾向直接转人工/工单，并给"请补充具体范围/联系专家"提示；或在降级时明确标注"以下为通用参考，非针对您企业的精确核算"，把预期管理做在前面，不误导。
+- 追问2：模型降级"大模型不可用切小模型"——小模型没有 Function Calling 能力时，降级后 Tool 调用链路是直接废掉，还是改用规则兜底查库？
+  - **答**：小模型无 FC 能力时，降级为"规则兜底查库"——用预定义规则/关键词映射到对应查询接口（不走模型 FC），返回结构化结果再由可能的大模型做总结；若连大模型都没有，则退到固定 FAQ/检索，Tool 链路降级为硬编码路由。
+- 追问3：降级到人工兜底时，用户和人工客服之间的上下文（已经走了半截的 Agent 会话）怎么无缝交接，人工能看到 Agent 已做的步骤吗？
+  - **答**：能无缝交接。Agent 会话的完整步骤（Thought/Action/结果）已落审计日志，转人工时把"已执行步骤摘要 + 当前问题 + 缺失信息"一并推给人工工作台，人工可见 Agent 已做的全部工作，无需用户重述，直接续接。
+
+### 36. Agent的并发执行如何设计？
+**重要度**：★★★
+
+- 多用户请求隔离：每个 sessionId 独立的 Agent 实例和 Memory。
+- 线程池：Agent 执行使用独立线程池，与业务线程池隔离。
+- 工具并发：Plan-and-Execute 中独立的步骤可并行执行。
+
+#### 追问：
+- 追问1：每个 sessionId 独立 Agent 实例和 Memory，但 Agent 实例是每次请求 new 一个（无状态）还是常驻（有状态）？常驻的话 JVM 里几百个会话的 Agent 对象会不会撑爆内存？
+  - **答**：Agent 逻辑本身无状态（每次请求构建，Memory 在外部 Redis），不常驻对象；只有"会话状态"常驻 Redis。因此几百会话不会撑爆 JVM 内存——Agent 实例是轻量、每次 new 或池化复用，重状态外置，避免内存膨胀。
+- 追问2：工具并发"Plan-and-Execute 中独立步骤可并行"——并行调用 Tool 时如果多个 Tool 都写 Milvus，怎么避免向量索引写入冲突或版本错乱？
+  - **答**：并行 Tool 写 Milvus 时，对共享 Collection 写入加串行化（写队列/乐观锁版本号），或按步骤依赖把"写"集中到串行阶段；独立读类 Tool 才真并行。写入带 enterpriseId 隔离，避免跨租户版本错乱。
+- 追问3：业务线程池和 Agent 线程池隔离，那 Agent 执行中调通义千问 API 的 HTTP 连接池是共用还是独立，会不会被业务流量挤占导致 Agent 推理变慢？
+  - **答**：通义千问 API 的 HTTP 连接池独立配置（独立 OkHttp/WebClient 连接池 + 限流），与业务流量隔离，避免被挤占；Agent 推理设独立超时与熔断，业务高峰不影响 Agent 调用模型的连接供给。
+
+### 37. 如何实现Agent的热更新？
+**重要度**：★★★
+
+1. **Tool 热更新**：Tool 实现类通过 Spring 动态注入，配置变更即时生效。
+2. **Prompt 热更新**：Prompt 模板存储在配置中心（Nacos），修改即时生效。
+3. **模型切换**：模型配置在 Nacos，切换不影响运行中的会话（新会话用新模型）。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.agent.hotupdate;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.stereotype.Component;
+
+/**
+ * 热更新的三种层次（改 Prompt 不需要重启，改代码才需要）：
+ * 1) Prompt 模板热更新：存配置中心（Nacos/Apollo），@RefreshScope 刷新
+ * 2) 工具集合热更新：ToolCallback 用动态注册表，按版本号取
+ * 3) 模型路由热更新：网关层按配置切模型
+ */
+@Component
+@RefreshScope
+public class HotUpdatableAgent {
+
+    private final ChatClient chatClient;
+    private final PromptTemplateRepository templates;
+    private final ToolRegistry toolRegistry;
+
+    public HotUpdatableAgent(ChatClient.Builder builder,
+                             PromptTemplateRepository templates,
+                             ToolRegistry toolRegistry) {
+        this.templates = templates;
+        this.toolRegistry = toolRegistry;
+        this.chatClient = builder.build();
+    }
+
+    public String chat(String question) {
+        // Prompt 从配置中心取，改完刷新即生效
+        String systemPrompt = templates.get("carbon-assistant.system");
+        // 工具集合同样热更新：注册表按版本号返回当前生效的工具
+        var tools = toolRegistry.current();
+
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(question)
+                .tools(tools.toArray(new org.springframework.ai.tool.ToolCallback[0]))
+                .call()
+                .content();
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.agent.hotupdate;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.stereotype.Component;
+
+/**
+ * 2.0 变化：工具必须显式注册 ToolCallback Bean，
+ * 因此热更新工具集要用"动态 ToolCallbackProvider"而不是静态 List<ToolCallback>
+ */
+@Component
+@RefreshScope
+public class HotUpdatableAgent {
+
+    private final ChatClient chatClient;
+    private final PromptTemplateRepository templates;
+    private final ToolRegistry toolRegistry;
+
+    public HotUpdatableAgent(ChatClient.Builder builder,
+                             PromptTemplateRepository templates,
+                             ToolRegistry toolRegistry) {
+        this.templates = templates;
+        this.toolRegistry = toolRegistry;
+        this.chatClient = builder.build();
+    }
+
+    public String chat(String question) {
+        String systemPrompt = templates.get("carbon-assistant.system");
+        var tools = toolRegistry.current();
+
+        return chatClient.prompt()
+                .system(systemPrompt)
+                .user(question)
+                .tools(tools.toArray(new org.springframework.ai.tool.ToolCallback[0]))
+                .call()
+                .content();
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.agent.hotupdate;
+
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * LangChain4j：AiServices 声明式接口的 @SystemMessage 是编译期常量，
+ * 热更新要改成"运行时从配置中心取提示词"，
+ * 或用 ModularChatLanguageModel / 自定义实现动态切换
+ */
+@Component
+@RefreshScope
+public class HotUpdatableAgent {
+
+    private final PromptTemplateRepository templates;
+    private final ChatLanguageModel model;
+
+    public HotUpdatableAgent(ChatLanguageModel model, PromptTemplateRepository templates) {
+        this.model = model;
+        this.templates = templates;
+    }
+
+    public String chat(String question) {
+        // 提示词运行时取，实现热更新
+        String systemPrompt = templates.get("carbon-assistant.system");
+        // generate 返回 Response<AiMessage>，要 String 就取 content().text()
+        return model.generate(List.of(
+                dev.langchain4j.data.message.SystemMessage.from(systemPrompt),
+                dev.langchain4j.data.message.UserMessage.from(question)))
+                .content().text();
+    }
+}
+```
+
+#### 追问：
+- 追问1：Prompt 存 Nacos 即时生效，但正在流式输出中的会话用的是旧 Prompt 还是新 Prompt，会不会出现一个回答前半段旧逻辑、后半段新逻辑的不一致？
+  - **答**：正在流式输出的会话用"请求开始时快照的 Prompt"，不因 Nacos 变更中途切换；新请求才用新 Prompt。保证单个回答前后逻辑一致。若需强一致，可在会话级缓存 Prompt 版本号，整个会话用同一版本。
+- 追问2：Tool 通过 Spring 动态注入，新 Tool 类由谁编译加载——是提前打进 jar 的热注册，还是运行时加载外部 class？后者在 Java 安全沙箱下可行吗？
+  - **答**：实际是"提前编译进 jar 的热注册"——新 Tool 代码随版本发布已打进包，Nacos 配置只是启用/注册它，无需运行时加载外部 class。后者在 Java 安全沙箱/模块化下风险高，我们不采用。
+- 追问3：模型切换"不影响运行中的会话，新会话用新模型"——如果切换的是底层通义千问版本且新版本返回格式有变，正在跑的旧会话可能会因为框架已按旧格式解析而出错，你怎么隔离？
+  - **答**：运行中会话绑定"模型版本 + 解析适配器版本"，切换只影响新会话；旧会话继续用旧适配器解析旧格式。框架对返回格式做版本化适配，避免新格式改变导致旧会话解析出错，做到会话级隔离。
+
+### 38. Agent的未来发展趋势是什么？
+**重要度**：★★
+
+1. **多模态 Agent**：处理文本+图片+语音。
+2. **自主 Agent**：从被动响应到主动执行（如自动监控碳法规更新）。
+3. **Agent 协作网络**：多个 Agent 组网协作，类似微服务架构。
+4. **MCP 标准化**：Tool 调用标准化，跨平台复用。
+5. **Agent 即服务**：Agent 作为可调用服务，按需编排。
+
+
+#### 追问：
+- 追问1：你说"自主 Agent 从被动响应到主动执行"，碳管家的法规追踪 Agent 现在就是定时的，这算自主吗？你设想的真正自主 Agent 还差哪一步（如自己发现法规漏洞主动告警）？
+  - **答**：当前只是"定时触发 + 固定流程"，属半自主（被动按 schedule）。真正自主还差"主动感知"——如主动监控法规源变化、发现潜在合规漏洞主动告警、无需人工设 schedule。下一步是加"异常驱动触发"和"主动建议"能力。
+- 追问2：MCP 标准化你列为趋势，但前面你又说碳管家私有化部署下 MCP 可能过度设计——这两者不矛盾吗，你判断 MCP 在你们场景是近期还是远期才值得接？
+  - **答**：不矛盾。趋势层面 MCP 是行业方向（跨平台复用 Tool）；但具体到我们私有化单体部署，当前收益不足以覆盖成本，故近期不接、远期当需开放 Tool 给外部/多端时再接。判断是"场景驱动"，非一味追趋势。
+
+
+#### 扩充第六节：AI Agent（新增10题）
+
+
+### 39. ReAct模式详解
+**重要度**：★★★★
+
+**题目：ReAct（Reasoning + Acting）模式如何让Agent交替进行推理和行动？在碳管家Agent中如何实现？**
+
+ReAct模式是Agent设计的核心范式，Agent在每一步先推理（Thought）再行动（Action），观察结果（Observation）后再推理下一步，形成循环。
+
+ReAct循环：
+- Thought：Agent分析当前状态和目标，推理下一步该做什么
+  - 示例："用户要计算钢铁产品碳足迹，我需要先查询钢铁行业排放因子"
+- Action：Agent调用工具执行推理结果
+  - 示例：调用`carbonFactorLookup(industry="钢铁")`
+- Observation：Agent观察工具返回结果
+  - 示例："钢铁行业CO2排放因子为1.89 tCO2e/t粗钢（长流程行业均值）"
+- 重复：基于Observation生成新Thought，决定下一步Action或生成最终答案
+
+碳管家ReAct实现示例：
+- 问题："根据ISO 14067标准，计算铝合金产品的碳足迹"
+- Thought 1："需要先检索ISO 14067的碳足迹计算方法"
+- Action 1：`ragRetriever(query="ISO 14067 碳足迹计算方法")`
+- Observation 1："ISO 14067规定产品碳足迹需计算原材料+制造+运输各阶段排放"
+- Thought 2："需要查询铝合金原材料的碳排放因子"
+- Action 2：`carbonFactorLookup(material="铝合金")`
+- Observation 2："铝合金原材料排放因子12.5 kgCO2e/kg"
+- Thought 3："只有因子算不出碳足迹——碳足迹 = 活动数据 × 排放因子，还缺该产品本期的物料投入量"
+- Action 3：`getActivityData(productId="AL-2024-001", period="2024Q3")`
+- Observation 3："本期铝合金投入量 1,000 kg，上游运输 120 t·km"
+- Thought 4："数据齐了，按 ISO 14067 边界计算：1,000 kg × 12.5 kgCO2e/kg = 12,500 kgCO2e（12.5 tCO2e），运输阶段另按运输因子补算"
+- Final Answer：生成结构化碳足迹计算报告（含因子来源、活动数据来源与版本、分阶段排放量）
+- 要点：ReAct 的终止条件不是"查到了方法或因子"，而是**因子 + 活动数据都齐、可以代入公式**；缺活动数据就直接出报告是这类 Agent 最常见的领域性错误
+
+Spring AI/LangChain4j实现：
+- LangChain4j的AiServices内置ReAct循环（Tool Calling自动触发）
+- Spring AI的Tool Calling也支持ReAct模式（LLM判断何时调用Tool）
+- 自定义Agent可在Advisor Chain中实现Thought→Action→Observation的显式循环
+
+#### 追问：
+- 追问1：你举的碳管家 ReAct 例子里 Final Answer 是"结构化碳足迹计算报告"，但 ReAct 循环本身只负责推理+调 Tool，结构化报告格式化是在循环内由模型生成，还是循环结束后单独用模板拼装？
+  - **答**：循环内模型生成"内容要点"，循环结束后再用模板拼装成正式结构化报告（填充固定版式/章节/单位），保证格式稳定。即 ReAct 负责推理+取数，格式化由后处理模板完成，避免模型每次输出格式漂移。
+- 追问2：Spring AI 在 Advisor Chain 里实现显式 Thought→Action→Observation 循环，和 LangChain4j AiServices 的自动循环相比，显式实现多花了多少代码量，换来什么可控性？
+  - **答**：显式实现（Advisor Chain 手写循环）多花约 30%~50% 代码量（需自己管理状态/步骤/终止），换来控制力：可插桩审计、自定义终止条件、逐步可视化、错误干预。自动循环省代码但黑盒；复杂合规场景我们倾向显式以保可控。
+
+### 40. 基于LangGraph的有状态Agent设计
+**重要度**：★★★★
+
+**题目：传统Agent是无状态的ReAct循环，LangGraph如何实现有状态的Agent设计？碳管家中何时需要？**
+
+LangGraph（LangChain的图执行引擎）将Agent流程从线性循环升级为有向图，支持分支、循环、状态持久化等复杂流程。
+
+LangGraph核心概念：
+- **StateGraph**：定义Agent的执行图，节点是处理步骤，边是转移条件
+- **State**：全局状态对象，在节点间传递和累积信息
+- **Conditional Edge**：根据State条件选择下一个节点（如检索质量好→生成，差→重新检索）
+- **Checkpoint**：状态持久化，支持暂停恢复和回放
+
+碳管家有状态Agent设计：
+```python
+# LangGraph定义（Python端，Java端可用LangChain4j模拟）
+from langgraph.graph import StateGraph, END
+
+graph = StateGraph(CarbonAgentState)
+graph.add_node("query_analysis", analyze_query)
+graph.add_node("retrieval", retrieve_knowledge)
+graph.add_node("evaluation", evaluate_retrieval)
+graph.add_node("generation", generate_answer)
+graph.add_node("web_search", search_web)
+
+graph.add_edge("query_analysis", "retrieval")
+graph.add_edge("retrieval", "evaluation")   # evaluation 必须有入边，否则这个节点永远不会执行
+
+def route_after_evaluation(state: CarbonAgentState) -> str:
+    # 第二个参数必须是【路由函数】：它接收 state、返回路径映射表的 key（不是目标节点名）
+    return "generate" if state["retrieval_score"] >= 0.6 else "search"
+
+graph.add_conditional_edges(
+    "evaluation", route_after_evaluation,
+    {"generate": "generation", "search": "web_search"})
+graph.add_edge("web_search", "generation")
+graph.add_edge("generation", END)
+```
+
+何时需要有状态Agent：
+- **复杂碳核算流程**：需要多步骤计算（原材料→制造→运输→使用→废弃），每步结果需累积到State中
+- **合规审核流程**：需要分支判断（合规→通过，不合规→生成整改建议），需状态记录判断路径
+- **长时任务**：LCA报告生成可能耗时数分钟，需Checkpoint支持暂停恢复
+- **审计需求**：完整记录Agent每步决策和执行，供后续审核回放
+
+Java端实现：LangChain4j无原生Graph支持，可用自定义`AgentExecutor`模拟节点图+状态传递。
+
+#### 追问：
+- 追问1：你说 Java 端 LangChain4j 无原生 Graph 支持、用自定义 AgentExecutor 模拟，那状态持久化（Checkpoint）是存 Redis 还是 MySQL，长时 LCA 任务暂停数天后恢复，状态对象序列化会不会因代码升级而反序列化失败？
+  - **答**：Checkpoint 存 Redis（热状态、快恢复）+ MySQL（长期归档）。防反序列化失败：State 用"版本号 + 向后兼容的序列化"（如 JSON + 字段默认值），代码升级时旧 State 按版本迁移（migration）而非强反序列化，避免升级后恢复失败。
+- 追问2：Conditional Edge 根据检索质量决定 generation 还是 web_search，这个"检索质量"的判定信号是什么——向量相似度阈值、还是再调一个小模型打分？阈值定太高会总去联网，定太低会答不准，怎么调？
+  - **答**：用"向量相似度阈值 + 结果计数/置信度"做主信号（如 top1 相似度 < 0.6 或结果空则判差）；边界情形再调小模型打分。阈值调参靠离线评测集标定——在验证集上找"误联网率 vs 答不准率"平衡点，上线后用真实反馈微调。
+- 追问3：有状态 Agent 的 State 在节点间累积，如果 evaluation 节点把"检索质量差"误判成"好"直接进入 generation，生成了错误答案，这个错误 State 会污染后续节点吗，有没有回滚点？
+  - **答**：有回滚点。每个节点执行前快照 State（Checkpoint），evaluation 误判导致错误答案时，可从该 Checkpoint 回滚重走（如改走 web_search 或人工）。关键节点设"质量门禁"，不达标不进入下一节点，防止错误 State 向后传播。
+
+### 41. Tool Use的Function Schema设计最佳实践
+**重要度**：★★★★★
+
+**题目：碳管家Agent有多个Tool（排放因子查询、LCA计算、法规检索等），如何设计Function Schema使LLM能正确选择和调用？**
+
+Function Schema是LLM理解Tool的窗口，Schema设计质量直接决定Tool Calling的准确率。
+
+最佳实践：
+
+**1. 命名规范**：
+- 使用动词+名词：`lookupEmissionFactor`、`calculateCarbonFootprint`、`searchRegulation`
+- 避免模糊命名：不要用`getData`、`process`、`handle`
+- 碳管家命名体系：`carbon_factor_lookup`、`lca_calculate`、`iso_standard_search`
+
+**2. 参数设计**：
+- 参数数量≤5个，过多LLM难以正确填写
+- 每个参数必须有description，说明类型、格式、可选值
+- 枚举参数显式列出可选值：`industry: {钢铁, 化工, 建筑, 交通运输}`
+- 必填vs可选明确标注：行业是必填，年份是可选（默认最新）
+
+**3. 返回值设计**：
+- 返回精简结构化数据（≤200字JSON），LLM不宜处理大JSON
+- 碳管家示例：`{value: 0.85, unit: "tCO2e/t钢", source: "EPA 2024", applicable_year: 2024}`
+- 不返回全量数据（如整个排放因子表），只返回与查询相关的结果
+
+**4. Description设计**：
+- 一句话描述功能："查询指定行业和工艺的碳排放因子数值"
+- 说明适用场景和局限："仅支持EPA排放因子库中的行业，未知行业返回null"
+- 避免技术术语：用业务语言而非代码语言描述
+
+**5. 错误处理**：
+- Schema中说明错误返回格式：`{error: "行业不存在", suggestion: "请选择：钢铁/化工/建筑"}`
+- LLM可根据错误信息自动修正参数重新调用
+
+#### 追问：
+- 追问1：你要求"参数数量≤5、枚举显式列出"，但碳管家实际一个 LCA 计算 Tool 可能需要行业/工艺/范围/年份/产品/数据来源等七八个参数，强行压到5个以内会丢信息，你是合并参数还是拆成多个 Tool？
+  - **答**：合并 + 拆分并存。把"可选/可推导"参数合并为对象（如 scope 对象含范围/年份），或把复杂计算拆成"分步 Tool"（先选行业工艺、再算范围），每步 ≤5 参数。核心原则：LLM 每次只面对少量必填参数，降低填错率。
+- 追问2：返回"≤200字 JSON、不返回全量数据"——但排放因子查询有时用户就要对比整个行业所有工艺，这种"要全量"的场景和你的精简返回原则冲突，怎么兼顾？
+  - **答**：提供"摘要返回 + 明细按需"——默认返回行业工艺列表摘要（≤200 字），用户明确要全量时由独立 Tool（如 listAllFactors）分页/聚合返回，且不进 LLM 上下文（直接给前端表格）。兼顾精简原则与对比需求。
+- 追问3：Schema 里写错误返回格式 {error, suggestion} 让 LLM 自修，但如果 Tool 内部超时（没返回结构化 error 而是抛异常），框架把异常转成什么给模型，模型能识别并换参数吗？
+  - **答**：框架捕获异常，统一转成结构化 error 返回给模型：{error:"查询超时", suggestion:"请稍后重试或缩小查询范围"}，模型据此换参数/重试。超时不应抛原生异常中断对话，而是作为 observation 反馈，保持 ReAct 循环可继续。
+
+### 42. Agent的意图澄清与确认机制
+**重要度**：★★★★
+
+**题目：用户问"帮我算一下碳足迹"，但缺少关键信息（产品类型、数据范围），Agent如何主动澄清意图？**
+
+意图澄清（Ambiguity Handling）是Agent在信息不足时主动向用户确认，避免基于不完整信息生成错误答案。
+
+设计原则：
+- **识别信号**：用户问题含模糊词（"帮我算"、"那个数据"、"最近的政策"）
+- **分类缺失**：区分必要信息缺失（产品类型）vs 可选信息缺失（年份版本）
+- **必要信息缺失**→ 必须追问，不生成答案
+- **可选信息缺失**→ 用默认值继续，但标注"使用了默认值X，如需调整请告知"
+
+澄清策略：
+- 单次追问：一次列出所有缺失信息，避免多轮低效追问
+  - "请补充以下信息：1.产品类型（铝合金/钢铁/...）2.计算范围（原材料+制造+运输？）3.数据年份"
+- 智能追问：Agent先尝试用已有信息推理，仅追问推理无法补充的信息
+  - 用户说"钢铁产品"→ Agent可自动推断查询钢铁行业排放因子，只追问"具体工艺路线？"
+- 选项追问：提供预设选项而非开放式追问，降低用户回答难度
+  - "计算范围选择：A.全生命周期 B.仅制造阶段 C.原材料+制造"
+
+LangChain4j实现：
+- 在AiServices的System Message中注入澄清策略
+- 使用Tool `askUser(question)` 让Agent主动向用户提问
+- Agent判断信息不足时调用`askUser`，用户回答后Agent继续推理
+
+Spring AI实现：
+- 自定义`AmbiguityHandlerAdvisor`在请求前检查信息完整性
+- 不完整时拦截请求，返回追问消息而非调用LLM生成
+
+#### 追问：
+- 追问1：你区分"必要信息缺失必须追问"和"可选缺失用默认值"，但这个边界谁定——是写死在 Prompt 里（如产品类型必填），还是由领域规则引擎判定？如果用户坚持不说产品类型，Agent 是反复追问还是放弃？
+  - **答**：边界由"领域规则引擎"判定（如碳核算产品类型为必填，由业务规则表定义），非写死 Prompt。用户坚持不答必要信息时，Agent 给"默认值假设 + 明确提示"并允许其纠正，或转人工；不无限循环追问，避免体验崩坏。
+- 追问2：选项追问"提供预设选项降低回答难度"，但碳管家行业术语多（范围一/二/三、摇篮到大门），用户可能看不懂选项，你的选项文案是业务化翻译过的吗？
+  - **答**：选项文案做业务化翻译，不直接暴露术语。如"A.全生命周期（从原料到报废）""B.仅生产阶段"，用括号补通俗说明；对范围一二三也映射为"企业自有排放/外购能源/供应链"等用户易懂表述，降低理解门槛。
+
+### 43. Agent的分层设计
+**重要度**：★★★★
+
+**题目：碳管家AI助手需要处理多种场景（FAQ/计算/合规/报告），如何设计分层Agent架构（顶层路由→领域Agent→工具调用）？**
+
+分层Agent将复杂AI系统拆分为多层职责，每层专注不同粒度的任务，提升系统可维护性和准确性。
+
+三层架构设计：
+
+**Layer 1 - Router Agent（路由层）**：
+- 职责：分析用户意图，路由到对应领域Agent
+- 判断维度：问题类型（FAQ/计算/合规/报告）、复杂度、是否需要Tool
+- 实现方式：轻量分类模型或LLM intent classification
+- 路由表：
+  - "什么是碳足迹？" → FAQ Agent
+  - "计算这个产品的碳排放" → Calculation Agent
+  - "是否符合ISO 14064要求？" → Compliance Agent
+  - "生成LCA报告" → Report Agent
+
+**Layer 2 - Domain Agent（领域层）**：
+- FAQ Agent：简单问答，直接LLM生成，无需Tool
+- Calculation Agent：ReAct循环，调用排放因子查询+LCA计算+数值校验Tool
+- Compliance Agent：法规检索+条款对比+判定逻辑，调用法规检索Tool
+- Report Agent：多步骤生成，调用多个Tool收集数据+格式化输出
+
+**Layer 3 - Tool Layer（工具层）**：
+- 每个Domain Agent有专属Tool集合
+- Calculation Agent的Tools：`carbonFactorLookup`、`lcaCalculator`、`dataValidator`
+- Compliance Agent的Tools：`regulationSearch`、`standardCompare`、`complianceJudge`
+
+Spring AI实现：
+- Router Agent：一个独立 `ChatClient`（或直接 `ChatModel.call()`）做意图分类，输出结构化枚举 + 置信度
+- Domain Agent：每个领域一个 `ChatClient`，用 `ChatClient.builder(model).defaultSystem(...).defaultTools(...)` 装配各自专属的 Tool 集合；工具本身用 `@Tool` 普通方法或 `ToolCallback` Bean 声明
+- 横切逻辑（租户隔离/审计/记忆）统一挂 Advisor Chain，不写进各 Domain Agent
+- 注意别写成 `AiServices`：那是 **LangChain4j** 的接口，Spring AI 里没有这个类，混用会被面试官直接判定不熟框架
+
+#### 追问：
+- 追问1：Router Agent 用 ChatModel.call 做意图分类，如果分类错了把"是否符合 ISO 14064"路由到 FAQ Agent 而非 Compliance Agent，FAQ 裸答会出错，Router 有没有置信度兜底（低于阈值转人工或走全链路）？
+  - **答**：有。Router 输出带置信度，低于阈值（如 0.7）不直投 FAQ，转"全链路 ReAct（带 RAG + 计算）"或澄清/人工；对高后果意图（合规判定）阈值更严。错误路由会被兜底链路吸收，避免 FAQ 裸答合规题。
+- 追问2：三层通过 Advisor Chain 串联，Domain Agent 各自配专属 Tools，那 Router 层本身有没有 Tools，还是纯分类？如果 Router 也要查"用户权限"再决定路由，它的权限检查放哪层？
+  - **答**：Router 默认纯分类无 Tool；若需查权限再路由，则给 Router 配轻量 `checkPermission` Tool，或把权限检查放在 Advisor（TenantIsolationAdvisor）中统一做，不污染领域 Agent。权限在路由前拦截，决定可达的 Agent 集合。
+- 追问3：Report Agent 多步骤生成调多个 Tool，如果其中"格式化输出"这步依赖前几步结果，分层架构下它怎么拿到中间 State，是每层都全量传 State 还是只传最终结果？
+  - **答**：分层间通过"共享 State 对象"传递，不光传最终结果。Router→Domain 传意图+槽位，Domain 内各步累积到 State，Report Agent 从 State 取前序结果。State 以上下文对象贯穿 Advisor Chain，按需读取，避免信息丢失。
+
+### 44. Agent执行的可中断/可恢复设计
+**重要度**：★★★★
+
+**题目：LCA报告生成可能需要5-10分钟，用户中途可能需要暂停或修改参数，如何设计Agent的可中断/可恢复机制？**
+
+可中断/可恢复设计使Agent长时任务可暂停、可恢复、可修改，是生产级Agent的关键能力。
+
+中断机制设计：
+- 每个Agent步骤后检查中断信号（Redis flag或数据库状态）
+- 用户点击"暂停"→ 设置中断信号 → Agent在下一个步骤前检测到 → 保存当前State → 暂停执行
+- 中断粒度：步骤级中断（在Tool调用之间中断，不在Tool调用中间中断）
+
+恢复机制设计：
+- Agent State持久化到Redis/MySQL，包含：已执行步骤、中间结果、下一步计划
+- 用户点击"继续"→ Agent从持久化的State恢复 → 从中断步骤继续执行
+- 修改参数恢复：用户修改参数后，Agent从参数变更影响的步骤重新执行
+
+实现架构：
+```java
+public class ResumableAgentExecutor {
+    private AgentStateStore stateStore; // Redis存储Agent状态
+
+    public AgentResult execute(AgentRequest request) {
+        AgentState state = stateStore.load(request.getSessionId());
+        if (state != null && state.isInterrupted()) {
+            // 从中断点恢复
+            return continueFrom(state);
+        }
+        // 新执行
+        return startNew(request);
+    }
+
+    private AgentResult continueFrom(AgentState state) {
+        for (Step step : state.getRemainingSteps()) {
+            if (interruptSignal.check(state.getSessionId())) {
+                stateStore.save(state.markInterrupted(step));
+                return AgentResult.paused();
+            }
+            state.executeStep(step);
+        }
+        return AgentResult.completed(state.getFinalResult());
+    }
+}
+```
+
+碳管家场景：
+- LCA报告生成分5步：数据收集→因子查询→分阶段计算→汇总→格式化
+- 用户可在第3步后暂停，修改某个阶段的参数后继续
+- 暂停时已完成的步骤结果缓存，不重复执行
+
+#### 追问：
+- 追问1：中断粒度是"步骤级、在 Tool 调用之间"，但 LCA 计算里一个 Tool 内部可能跑几分钟（如大数据量分阶段计算），这段时间无法中断，用户点暂停要等很久，能接受吗？
+  - **答**：能接受但有优化。单 Tool 内部长计算（如大数据量分阶段）确实无法步骤级中断；优化：把长计算拆成多个子 Tool/子步骤，每子步间可中断；或对可中断点做"协作式检查点"（计算循环里定期查中断信号），缩短最长不可中断时长。
+- 追问2：修改参数恢复"从受影响步骤重执行"，但怎么判定哪些步骤受影响——是依赖分析（步骤间数据依赖图）还是简单"从该步之后的全重跑"，后者会不会重复耗时？
+  - **答**：用"步骤依赖图"做增量重跑。维护步骤间数据依赖（DAG），修改参数后只重跑受影响的下游步骤及其传递闭包，未受影响步骤复用缓存结果，避免全重跑耗时。比"从该步之后全重跑"更省。
+- 追问3：Redis 存 Agent State，如果 LCA 任务跑到第4步服务宕机，State 只持久化到哪一步取决于你何时 save，你保证每步结束都 save 吗，还是为了性能批量 save（有丢步风险）？
+  - **答**：保证每步结束都 save（步骤级持久化），而非批量 save，避免宕机丢步。State 写入用"同步 + 确认"；若担心性能，save 走异步但带"步骤完成确认"才标记，恢复时以最后已确认步为断点，兼顾性能与安全。
+
+### 45. Agent的多租户隔离
+**重要度**：★★★★
+
+**题目：碳管家SaaS平台服务多家企业客户，每家的碳数据和知识库不同，Agent如何实现多租户隔离？**
+
+多租户隔离确保不同企业客户的Agent不交叉访问数据、不共享记忆、不泄露敏感信息。
+
+隔离维度：
+
+**数据隔离**：
+- Milvus 用**单 Collection（按业务域拆少量）+ partition key（`enterprise_id`）+ 检索强制标量过滤**，不按企业建 Collection
+- 每个企业独立的排放因子库、LCA数据、ISO标准解读（逻辑隔离，同一 Collection 内按租户标签区分）
+- Agent检索时自动注入`enterprise_id`过滤条件，确保只检索本企业知识
+- 物理隔离只给超大客户做：独立 Milvus 实例 / 独立 DB，成本高，不进标准套餐
+
+**模型配置隔离**：
+- 不同企业可配置不同模型参数（temperature、maxTokens）
+- 大客户（付费高）路由到72B模型，小客户路由到14B模型
+- Nacos按`enterpriseId`命名空间隔离配置
+
+**记忆隔离**：
+- ChatMemory按`enterpriseId + sessionId`存储
+- 不同企业的对话历史不共享
+- Redis Key：`chat:memory:{enterpriseId}:{sessionId}`
+
+**Tool隔离**：
+- `enterpriseDataQuery` Tool仅在`enterpriseId`匹配时返回数据
+- 实现方式：Tool参数自动注入当前租户ID，查询时按租户过滤
+
+Spring AI实现：
+- 自定义`TenantIsolationAdvisor`：在请求前自动注入租户ID到Prompt和检索Filter
+- `@RequestScope` Bean使每次请求获取当前租户的专属配置
+- ThreadLocal存储当前租户Context，贯穿整个Agent执行链路
+
+安全边界：Agent输出审核层检查是否包含其他企业的数据标识，发现即阻断返回。
+
+#### 追问：
+- 追问1：正文一边说"单 Collection + partition key"，一边又说"每个企业独立的因子库/知识库"，这两句是不是矛盾？万级租户挤在一个 Collection 里怎么保证不串数据，客户要"物理隔离"时你又怎么答？
+  - **答**：先纠正概念——partition key **不是物理隔离**，Milvus 分区数默认 16、上限 1024，租户数超过分区数时多个租户会落在同一个 partition，真正的隔离靠每条向量带的 `enterprise_id` 标量字段，检索时强制 `expr: enterprise_id == 'xxx'`（这条由 TenantIsolationAdvisor 统一注入，业务代码不手写，防止漏加）；partition key 的价值是分区裁剪，把检索范围从全库缩到一个 partition，省的是延迟和内存，不是隔离级别。
+    - 硬隔离要往上走一级：独立 Milvus 实例或独立 DB（天然不共享 Collection），成本约为共享模式的数倍，只在"超大客户/强合规要求"的套餐里提供；
+    - Collection-per-tenant 在千级租户下直接不可运维——Collection 数量爆炸，加载与元数据开销不可控，所以不用它做隔离手段；
+    - 兜底还要有输出层校验（见追问 2），防止过滤条件写漏时静默泄露。
+- 追问2：你说"输出审核层检查是否含其他企业数据标识，发现即阻断"，但大模型输出是自由文本，它会不会用同义改写绕过"数据标识"关键词检测，这种语义级泄露怎么防？
+  - **答**：关键词检测不够，需语义级防护——输出前用"租户分类模型/相似度"判断回答是否混入他企数据特征，或做"差分——只输出当前租户可访问字段"。更稳的是在检索层就严格按 enterpriseId 过滤，源头不出他企数据，输出层再二次校验。
+- 追问3：模型配置隔离"大客户路由72B、小客户14B"，但同一台推理服务器上大小模型共存，怎么保证小客户突发流量不挤占大客户的计算资源（GPU 配额隔离）？
+  - **答**：按租户做 GPU/推理配额隔离（如 vLLM 的 serving 分组、K8s 资源配额 + 限流）。大客户预留保障配额，小客户突发流量被限流排队而非挤占；可用"优先级队列 + 配额上限"保证大客户 SLA，小客户超额降级到小模型。
+
+### 46. Agent的审计日志与回放
+**重要度**：★★★★
+
+**题目：碳管理AI系统的决策可能影响企业碳排放报告的合规性，如何设计Agent的审计日志和回放机制？**
+
+审计日志记录Agent每次执行的完整决策链路，回放机制支持事后重现和分析Agent行为。
+
+审计日志内容：
+- **输入层**：用户原始问题、租户ID、会话ID、时间戳
+- **推理层**：每一步Thought内容、意图分类结果、路由决策
+- **行动层**：Tool名称、调用参数、返回结果、耗时
+- **生成层**：最终答案、置信度、引用来源
+- **异常层**：中断/失败/纠正记录
+
+日志存储设计：
+- 主存储：MySQL（持久可靠，支持复杂查询）
+- 实时查看：Redis（最近100条日志的快速查询）
+- 归档：对象存储（OSS/S3），超过30天的日志归档
+
+```sql
+CREATE TABLE agent_audit_log (
+    id BIGINT PRIMARY KEY,
+    session_id VARCHAR(64),
+    enterprise_id VARCHAR(64),
+    step_type ENUM('THOUGHT', 'ACTION', 'OBSERVATION', 'GENERATION'),
+    step_order INT,
+    content JSON,           -- 步骤内容详情
+    tool_name VARCHAR(128), -- 调用的Tool名
+    tool_params JSON,       -- Tool参数
+    tool_result JSON,       -- Tool返回
+    duration_ms INT,        -- 步骤耗时
+    created_at TIMESTAMP
+);
+```
+
+回放机制：
+- 按`session_id`查询完整执行链路
+- 前端可视化：逐步展示Thought→Action→Observation→Answer的完整过程
+- 碳审核场景：审核员可回放Agent的完整决策过程，验证碳排放计算的每一步
+- 异常分析：回放失败/低质量对话，定位问题环节（如检索结果不佳或推理错误）
+
+Spring AI实现（1.0 起的 Advisor 体系）：
+- 同步路径实现 `CallAdvisor`：`adviseCall(ChatClientRequest request, CallAdvisorChain chain)` 里记录请求（模型、会话 ID、Prompt 摘要）→ `chain.nextCall(request)` → 记录响应（token 用量、耗时、引用来源）
+- 流式路径实现 `StreamAdvisor`：`adviseStream(request, StreamAdvisorChain chain)` 返回 `Flux<ChatClientResponse>`，用 `doOnNext` 记 chunk 序号、`doOnComplete` 落最终用量；两条路径都实现才能同时覆盖 `call()` 与 `stream()`
+- `getOrder()` 返回 `int`（继承 `Ordered`），审计类建议 `Ordered.HIGHEST_PRECEDENCE + 100`，排在最外层才能记到后续 Advisor 的改写
+- Tool 调用明细不在这两个回调里——包一层 `ToolCallback` 装饰器（或工具方法内埋点）记录 name / args / result / 耗时
+- 旧版的 `adviseRequest()` / `adviseResponse()` 属 `RequestResponseAdvisor` 时代，1.0 已废弃，别写
+
+#### 追问：
+- 追问1：审计日志主存 MySQL、实时 Redis、归档 OSS，但一次 Agent 执行可能产生几十条 step 记录，高并发下写 MySQL 会不会成为瓶颈，你做了异步批量写吗？
+  - **答**：做了异步批量写。审计日志先入内存队列/Redis，由独立线程批量落 MySQL（攒批 + 异步），不阻塞 Agent 主链路；实时查看走 Redis，归档走 OSS。高并发下主链路零等待，MySQL 写入削峰。
+- 追问2：回放"按 session_id 查完整链路"，但如果某步 Tool 返回的是敏感数据（如其他部门碳排放），审核员回放时权限怎么控制，会不会回放本身造成二次泄露？
+  - **答**：回放本身受权限控制：审核员只能回放"本租户/本权限范围"的会话，敏感数据字段在回放视图中按权限脱敏（如只显聚合值不显原始明细）。回放不绕过租户隔离，避免二次泄露。
+- 追问3：碳审核要验证"碳排放计算每一步"，但你的审计日志记的是 Thought/Action/结果，真正的中间数值计算过程（如因子×产量）在哪里留痕，还是在 Tool 内部没暴露？
+  - **答**：中间计算过程（因子×产量）应在 Tool 内部结构化留痕——calc Tool 返回含"公式 + 各输入值 + 结果"的明细，并写入审计日志的计算步骤，而非只留最终值。确保审核能验证每一步算术，满足合规可追溯。
+
+### 47. OpenAI Responses API vs 自研Agent
+**重要度**：★★★
+
+**题目：OpenAI 的托管 Agent 能力（Responses API：内置 web search / file search / code interpreter 工具 + 服务端 conversation 状态）与自研 Agent 编排，碳管家该怎么选？**
+
+> ⚠️ 前提更正：**Assistants API 已于 2026-08-26 停服**，能力并入 Responses API。这道题的对象是「Responses API vs 自研编排」，别再按当年的 Assistants（thread + assistant + run 三件套）去答。
+
+| 维度 | OpenAI Responses API | 自研Agent |
+|------|----------------------|-----------|
+| **开发速度** | 极快（内置工具即用） | 较慢（需设计+实现） |
+| **灵活性** | 中（可调，但编排范式受 API 约束） | 高（完全自定义） |
+| **模型依赖** | 强依赖OpenAI | 可切换任意模型 |
+| **数据隐私** | 数据经OpenAI处理 | 数据完全内控 |
+| **成本** | 按 token + 工具调用计费 | 自建推理成本可控 |
+| **Tool集成** | 内置工具（web search / file search / code interpreter）+ 自定义 function schema | 可集成任意 Java 方法，工具数量与副作用控制自己定 |
+| **记忆管理** | 服务端 conversation 托管（也可无状态传历史） | 自定义存储策略 |
+| **审计能力** | 有限（只暴露最终响应与工具调用摘要） | 完全可审计，每步 State 可回放 |
+
+碳管家选型分析：
+- **强烈倾向自研**，原因：
+  1. 数据隐私：企业碳排放数据是敏感经营信息，不能经第三方API处理
+  2. 模型灵活：碳管家使用私有部署的通义千问（vLLM），不依赖OpenAI
+  3. 定制深度：碳管理Agent需要行业特有Tool（排放因子查询、LCA计算），自研可深度定制
+  4. 成本控制：SaaS模式需要推理成本可控，自研可用模型路由降低成本
+  5. 审计合规：碳审核需要完整决策回放，自研可完全审计
+
+- **Responses API适合场景**：
+  1. 快速原型验证：短期演示直接开内置 web search / file search，不用自己搭检索与工具链
+  2. 非敏感场景：公开碳管理知识问答（不涉及企业私有数据）
+  3. 海外客户：需要强推理能力的国际客户可独立使用（按合规路由通义千问/DeepSeek）
+
+#### 追问：
+- 追问1：你强烈倾向自研、理由之一是"数据隐私不能经第三方"，但自研用通义千问如果是公有云 API 版，数据其实也出了企业内网，这个"隐私"论证在私有化 vLLM 才成立，你区分了这两种部署吗？
+  - **答**：区分了。自研"数据隐私"论证仅在私有化 vLLM 部署下完全成立；若用通义千问公有云 API，数据同样出企业内网，此时隐私论证弱化，需靠 contractual/加密/脱敏补足。我们主推私有化部署，公有云 API 仅限非敏感场景。
+- 追问2：你说自研"可切换任意模型"，但你的 Tool 调用和 Prompt 都是按通义千问格式写的，真要切到别的模型（如 Claude）时，Function Calling 的 Schema 差异要不要改大量代码？
+  - **答**：切模型要改适配层。Tool/Prompt 按通义格式写，切到 Claude 需经"模型适配层"转换 Function Calling Schema（参数风格/命名差异），不是零成本。我们的 AgentGateway 已抽象模型接口，换模型主要改适配层与少量 Prompt，不重写业务逻辑。
+- 追问3：Responses API 适合"海外客户需强推理能力"，但这类客户的数据同样敏感，走海外模型就不担心隐私了，这里是不是存在"国内敏感、海外放宽"的双重标准？
+  - **答**：不矛盾于"国内敏感"。海外客户若数据同样敏感，我们会建议私有化或合规云，而非无脑走 OpenAI；Responses API 仅用于"非敏感/已脱敏/客户知情同意"的海外场景。敏感数据无论境内外都走自研+私有化，标准一致。
+
+### 48. Agent的插件化架构（热加载工具）
+**重要度**：★★★
+
+**题目：碳管家持续新增业务功能（如新增"碳交易模拟"Tool），如何设计Agent的插件化架构支持Tool热加载，无需重启服务？**
+
+插件化架构使Agent的Tool集可动态增减，新Tool无需重启服务即可生效。
+
+设计原则：
+- Tool定义与核心Agent逻辑解耦
+- Tool注册中心动态管理（增删改查）
+- Agent每次执行时动态获取当前可用Tool列表
+- 新Tool加载不影响正在执行的Agent会话
+
+实现架构：
+
+**Tool Registry（注册中心）**：
+- 每个Tool定义存储为独立配置（JSON/YAML）：
+```json
+{
+  "name": "carbonTradeSimulator",
+  "description": "模拟碳排放配额交易，计算最优交易策略",
+  "parameters": {
+    "enterpriseId": {"type": "string", "required": true},
+    "quotaAmount": {"type": "number", "required": true}
+  },
+  "handlerClass": "com.ecarbon.ai.tools.CarbonTradeTool"
+}
+```
+- 注册中心用Nacos配置中心存储Tool定义，支持热更新通知
+
+**动态加载机制**：
+- Spring 里的动态注册走 `BeanDefinitionRegistry.registerBeanDefinition(...)`（`DefaultListableBeanFactory` 就是它的实现），或用 `GenericApplicationContext.registerBean(name, ToolCallback.class, supplier)`——**没有 `DynamicBeanRegistrar` 这个类**
+- Tool 的"定义"（name/description/参数 schema）与 `ToolCallback` 实例分开管：Bean 注册进去只是第一步，还要刷新 Agent 侧持有的 Tool 列表（每轮从注册表取当前生效集合，别缓存旧 List），否则注册了也用不上
+- LangChain4j 的 AiServices 在每次构建时读取当前 Tool 列表
+- Spring AI 2.0 提供渐进式工具披露（progressive tool disclosure）能力，由 advisor 按本轮意图只注入相关 Tool 子集，工具数量多时不必把全量 schema 塞进上下文
+
+**热加载流程**：
+1. 开发者提交新 Tool 代码和配置到 Git
+2. CI/CD 随主应用一起构建打包（**不单独打独立 jar**——独立 jar 必然要自定义 ClassLoader，还要处理类版本冲突与沙箱，代价远大于收益）
+3. 发版后运维在 Nacos 打开该 Tool 的启用开关（或调灰度比例），热更新只刷新配置、不换 jar
+4. Agent 服务监听 Nacos 变更事件 → 按开关从注册表摘除/注册 `ToolCallback` → 刷新 Tool 列表
+5. 新 Agent 会话自动包含新 Tool，旧会话按原 Tool 列表继续
+
+> 口径澄清：真正"无需重启"的是**配置级启停**（开关、Prompt、模型路由、权限）；**代码级新增 Tool 必须发版**，这一步没有安全的绕法。
+
+安全控制：
+- 新Tool需通过安全审核（Moderation检查）才能注册
+- Tool权限分级：基础Tool全客户可用，高级Tool仅付费客户可用
+- Tool调用日志独立审计，新Tool上线后重点监控调用频率和错误率
+
+---
+
+---
+
+#### 追问：
+- 追问1：你通过 Nacos 更新 Tool 配置、Spring 动态注册 Bean 实现热加载，但新 Tool 的 handlerClass 代码本身怎么进来——是提前打进所有 jar 只等配置启用，还是运行时加载外部 class 文件（后者有安全和兼容风险）？
+  - **答**：实际是"提前编译进 jar 的热注册"——新 Tool 代码随版本发布已打进包，Nacos 配置仅启用它，无需运行时加载外部 class。后者在 Java 安全沙箱/模块化下风险高（且运维不可控），不采用。
+- 追问2：新 Tool 上线后旧会话按原 Tool 列表继续、新会话才包含新 Tool，那如果新 Tool 是修复了一个旧 Tool 的 bug，正在进行的旧会话会带着 bug 跑完，你怎么处理这种不一致？
+  - **答**：接受短暂不一致，用"灰度 + 快速收敛"处理：旧会话按原列表跑完（通常短生命周期），新会话立即用修复版；若 bug 严重，可主动通知相关进行中会话终止并重建。长期靠"Tool 版本号"让会话绑定固定版本，升级可控。
+- 追问3：Tool 权限分级"高级 Tool 仅付费客户可用"，但这个权限是在 Tool 调用前由框架校验，还是靠 Prompt 让模型自觉不选——如果模型误调了付费 Tool，谁拦？
+  - **答**：由框架在 Tool 调用前校验，不靠 Prompt 自觉。权限拦截器按 enterpriseId + 用户角色校验该 Tool 是否可用，越权直接拒绝并返回"无权限"，模型根本拿不到执行机会；权限配置在 Nacos，与 Tool 注册联动。
+
+### 49. spring-ai-agent-utils、Spring AI Alibaba Agent Framework、agent-scope-java 三类 Java Agent 框架，实际落地中如何取舍？
+**重要度**：★★★
+
+这三类框架定位不同，适合不同场景：
+
+**1. spring-ai-agent-utils**
+- 定位：偏"能力补齐"，把 Claude Code 里好用的交互模式（Agent Skills、AskUserQuestionTool、Orchestration、A2A）逆向/封装到 Spring AI 生态。
+- 适合：已有 Spring AI 项目，需要快速补齐 Agent 交互能力（如主动提问、技能编排、Agent 间通信）。
+- 优势：与 Spring AI 原生集成，学习成本低。
+
+**2. Spring AI Alibaba Agent Framework**
+- 定位：阿里推出的 Agentic AI 框架，强调 DAG Graph 编排、多 Agent 协同、国产模型适配。
+- 适合：阿里云生态、需要可视化/结构化编排的复杂工作流。
+- 优势：DAG 编排可观测性强、可回滚；与通义千问等国产模型集成深。
+
+**3. agent-scope-java**
+- 定位：JVM 开源 Agent 框架，强调 ReAct reasoning、Harness Engineering（工程化 harness，即测试/评估/沙箱）。
+- 适合：自研 Agent 平台或对推理过程可控性要求极高的团队。
+- 优势：底层 Agent 运行时，推理过程透明、可评测。
+
+| 场景 | 推荐 |
+|---|---|
+| 已有 Spring AI 项目，需快速增强 Agent 交互 | spring-ai-agent-utils |
+| 阿里云/国产模型，复杂多 Agent 工作流 | Spring AI Alibaba Agent Framework |
+| 自研 Agent 运行时，强可控、可评测 | agent-scope-java |
+| 追求简单可控，团队规模小 | 自研 + Spring AI 原生 |
+
+在积木 LCA 云平台中，如果已用 Spring AI 做 RAG + ChatClient，可以先引入 spring-ai-agent-utils 补齐 AskUserQuestion 等交互能力；当业务流程复杂到需要 DAG 编排（如碳核算全流程），再评估是否引入 Spring AI Alibaba Agent Framework。
+
+#### 追问：
+- 追问1：DAG Graph 编排相比 ReAct 推理，各适合什么场景？
+  - **答**：DAG 适合步骤可预先确定、有明确依赖关系的任务（如"先查因子→再算碳足迹→再生成报告"），可观测性强、可回滚、性能好；ReAct 适合开放性问题，需要模型根据中间结果动态决定下一步动作（如"用户问一个模糊的合规问题，模型决定先查法规还是先查历史案例"）。生产中可以混合：外层 DAG 确定主流程，节点内部用 ReAct 处理不确定性子任务。
+- 追问2：A2A（Agent-to-Agent）协议在 Agent 框架生态里出现的意义是什么？
+  - **答**：A2A 是 Google 提出的 Agent 间协作协议，解决不同 Agent 互相发现、通信、任务委托的问题。意义在于：避免每个 Agent 框架各自为政，让"查法规 Agent""计算 Agent""报告 Agent"能跨框架协同。对碳管理这类多领域知识交叉的业务，A2A 比把所有能力塞进一个 Agent 更可持续。
+- 追问3："AskUserQuestionTool"在 Agent 中解决了什么工程问题？
+  - **答**：解决 Agent 遇到信息缺失时"盲目猜答案"的问题。当参数不足、意图不明、或需要用户确认时，Agent 主动调用该工具向用户提问（如"请确认核算边界是否包含范围三"），形成"调用→提问→再调用"的闭环，提升准确率和用户体验。在碳核算场景中，产品名称、核算边界、适用标准等关键参数如果缺失，Agent 不应猜，而应主动追问。
+
+### 50. 要在积木 LCA 云平台做一个"AI 碳核算助手"，支持多轮对话、工具调用和报告生成，你的整体技术方案是什么？
+**重要度**：★★★★
+
+整体方案分五层：
+
+**1. 会话与记忆层**
+- 多轮 session 用 Redis 存 `ChatMemory`（滑动窗口或 token 摘要）。
+- 长期记忆（用户偏好、企业边界设定）存 MySQL/向量库。
+- 关键实体（产品名称、核算边界、标准选择）在每一轮重新注入 system prompt。
+
+**2. 意图与编排层**
+- 意图识别：先由 LLM 判断是"知识问答""碳核算""报告生成"还是"需要追问"。
+- 编排：主流程用 DAG（如 Spring AI Alibaba Agent Framework），不确定性子任务用 ReAct。
+
+**3. 工具与 MCP 层**
+- 内部能力封装为 MCP Server：因子查询、LCA 计算引擎、报告生成、企业知识库。
+- 同时保留 Function Calling 作为模型与工具之间的调用机制。
+
+**4. 生成与输出层**
+- 答案生成 + 引用溯源（标注标准号、来源文档）。
+- 报告生成：LLM 只负责生成报告结构/章节大纲和关键结论，具体数值由计算引擎回填，最终排版用模板引擎（Freemarker/Docx4j/PDFBox）。
+
+**5. 工程保障**
+- 可观测：Spring AI trace、调用链、成本统计。
+- 安全：敏感数据脱敏、输出校验、沙箱执行计算代码。
+- 性能：向量检索缓存、热点问题预计算、限流熔断。
+
+
+#### 三种框架实现对比
+
+##### Spring AI 1.0 实现
+
+```java
+package com.carbon.guard.assistant;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+/**
+ * 整体方案落地（Spring AI 1.0）：
+ * - 对话：ChatClient + MessageChatMemoryAdvisor（会话记忆）
+ * - 工具：@Tool 方法查因子库/算碳足迹
+ * - 知识：QuestionAnswerAdvisor + Milvus 检索
+ * - 报告：异步任务 + 模板渲染
+ */
+@Service
+public class CarbonAssistantService {
+
+    private final ChatClient chatClient;
+    private final VectorStore vectorStore;
+    private final TaskExecutor reportTaskExecutor;
+    private final ReportRenderService reportRenderService;
+
+    public CarbonAssistantService(ChatClient.Builder builder,
+                                  ChatMemory chatMemory,
+                                  VectorStore vectorStore,
+                                  @Qualifier("reportTaskExecutor") TaskExecutor reportTaskExecutor,
+                                  ReportRenderService reportRenderService) {
+        this.vectorStore = vectorStore;
+        this.reportTaskExecutor = reportTaskExecutor;
+        this.reportRenderService = reportRenderService;
+        this.chatClient = builder
+                .defaultAdvisors(
+                        new MessageChatMemoryAdvisor(chatMemory),
+                        new QuestionAnswerAdvisor(vectorStore, SearchRequest.builder()
+                                .topK(5)
+                                .similarityThreshold(0.7)
+                                .build()))
+                .build();
+    }
+
+    public String chat(String conversationId, String question) {
+        return chatClient.prompt()
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .system("你是积木LCA云的碳核算助手，回答必须引用因子出处。")
+                .user(question)
+                .call()
+                .content();
+    }
+
+    /** 报告生成：提交即返回任务ID，后台异步跑 */
+    public String submitReport(String tenantId, String reportType) {
+        String taskId = java.util.UUID.randomUUID().toString();
+        reportTaskExecutor.execute(() -> generateReport(taskId, tenantId, reportType));
+        return taskId;
+    }
+
+    /** LLM 只出章节大纲与结论，数值由计算引擎回填，最后交给模板引擎渲染 */
+    private void generateReport(String taskId, String tenantId, String reportType) {
+        String outline = chatClient.prompt()
+                .system("你是碳核算报告撰写助手，按指定报告类型输出章节大纲与结论要点。")
+                .user(u -> u.text("租户：{t}\n报告类型：{r}").param("t", tenantId).param("r", reportType))
+                .call()
+                .content();
+        reportRenderService.render(taskId, tenantId, reportType, outline);
+    }
+}
+```
+
+##### Spring AI 2.0 实现
+
+```java
+package com.carbon.guard.assistant;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+/**
+ * 2.0 落地：与 1.0 的真实差异只有下面 4 条，其余业务逻辑照抄——
+ * 1) 工具改成 ToolCallback Bean 显式注册（defaultTools），ToolCallingAdvisor 自动完成"模型→工具→模型"往返
+ * 2) 记忆不再直接注入 ChatMemory Bean，而是 MessageWindowChatMemory + ChatMemoryRepository
+ *    （生产用 Redis 实现），会话状态可跨实例共享、重启不丢
+ * 3) 报告大纲改成 entity() 结构化输出：1.x 解析失败直接抛异常，
+ *    2.0 有 StructuredOutputValidationAdvisor 把校验失败原因发回模型重试
+ * 4) conversationId 必传；MCP 接外部碳数据服务时默认 Streamable HTTP
+ */
+@Service
+public class CarbonAssistantService {
+
+    /** 报告大纲：让模型直接吐对象，渲染层按字段排版，不再正则解析自由文本 */
+    public record ReportOutline(String title, List<String> chapters, String conclusion) {}
+
+    private final ChatClient chatClient;
+    private final VectorStore vectorStore;
+    private final TaskExecutor reportTaskExecutor;
+    private final ReportRenderService reportRenderService;
+
+    public CarbonAssistantService(ChatClient.Builder builder,
+                                  ChatMemoryRepository memoryRepository,
+                                  List<ToolCallback> tools,
+                                  VectorStore vectorStore,
+                                  @Qualifier("reportTaskExecutor") TaskExecutor reportTaskExecutor,
+                                  ReportRenderService reportRenderService) {
+        this.vectorStore = vectorStore;
+        this.reportTaskExecutor = reportTaskExecutor;
+        this.reportRenderService = reportRenderService;
+        this.chatClient = builder
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor.builder(MessageWindowChatMemory.builder()
+                                        .chatMemoryRepository(memoryRepository)
+                                        .maxMessages(20)
+                                        .build())
+                                .build(),
+                        new QuestionAnswerAdvisor(vectorStore, SearchRequest.builder()
+                                .topK(5)
+                                .similarityThreshold(0.7)
+                                .build()))
+                .defaultTools(tools.toArray(new ToolCallback[0]))
+                .build();
+    }
+
+    public String chat(String conversationId, String question) {
+        return chatClient.prompt()
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .system("你是积木LCA云的碳核算助手，回答必须引用因子出处。")
+                .user(question)
+                .call()
+                .content();
+    }
+
+    public String submitReport(String tenantId, String reportType) {
+        String taskId = java.util.UUID.randomUUID().toString();
+        reportTaskExecutor.execute(() -> generateReport(taskId, tenantId, reportType));
+        return taskId;
+    }
+
+    private void generateReport(String taskId, String tenantId, String reportType) {
+        ReportOutline outline = chatClient.prompt()
+                .system("你是碳核算报告撰写助手，按指定报告类型输出章节大纲与结论要点。")
+                .user(u -> u.text("租户：{t}\n报告类型：{r}").param("t", tenantId).param("r", reportType))
+                .call()
+                .entity(ReportOutline.class);
+        // 渲染层契约不变，仍收纯文本：把结构化大纲拼回 Markdown
+        String outlineText = outline.title() + "\n## "
+                + String.join("\n## ", outline.chapters())
+                + "\n" + outline.conclusion();
+        reportRenderService.render(taskId, tenantId, reportType, outlineText);
+    }
+}
+```
+
+##### LangChain4j 实现
+
+```java
+package com.carbon.guard.assistant;
+
+import dev.langchain4j.agent.tool.P;
+import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
+import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.MemoryId;
+import dev.langchain4j.service.UserMessage;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.stereotype.Service;
+
+/**
+ * 整体方案落地（LangChain4j 1.x）：
+ * - 对话：AiServices + chatMemoryProvider
+ * - 检索：contentRetriever（EmbeddingStoreContentRetriever）
+ * - 工具：@Tool 注解方法
+ * - 报告：异步任务 + 模板渲染
+ */
+@Service
+public class CarbonAssistantService {
+
+    private final CarbonAssistant assistant;
+    private final TaskExecutor reportTaskExecutor;
+    private final ReportRenderService reportRenderService;
+
+    public CarbonAssistantService(ChatLanguageModel model,
+                                  ContentRetriever retriever,
+                                  @Qualifier("reportTaskExecutor") TaskExecutor reportTaskExecutor,
+                                  ReportRenderService reportRenderService) {
+        this.reportTaskExecutor = reportTaskExecutor;
+        this.reportRenderService = reportRenderService;
+        this.assistant = AiServices.builder(CarbonAssistant.class)
+                .chatModel(model)
+                .contentRetriever(retriever)                       // 知识检索
+                .chatMemoryProvider(id -> dev.langchain4j.memory.chat.MessageWindowChatMemory.builder()
+                        .id(id).maxMessages(20).build())           // 多轮记忆
+                .tools(new CarbonTools())                          // 工具调用
+                .build();
+    }
+
+    public String chat(String conversationId, String question) {
+        return assistant.chat(conversationId, question);
+    }
+
+    public String submitReport(String tenantId, String reportType) {
+        String taskId = java.util.UUID.randomUUID().toString();
+        reportTaskExecutor.execute(() -> generateReport(taskId, tenantId, reportType));
+        return taskId;
+    }
+
+    private void generateReport(String taskId, String tenantId, String reportType) {
+        String outline = assistant.chat(taskId,
+                "按 " + reportType + " 输出报告章节大纲与结论要点，租户：" + tenantId);
+        reportRenderService.render(taskId, tenantId, reportType, outline);
+    }
+
+    /** 工具集：@Tool 方法由 AiServices 自动转成 JSON Schema 交给模型 */
+    static class CarbonTools {
+        @Tool("查询碳排放因子")
+        String queryCarbonFactor(@P("行业") String industry) {
+            return "钢铁: 2.1 tCO2/t";
+        }
+
+        @Tool("计算碳足迹")
+        String calcFootprint(@P("产品") String product, @P("活动数据") double amount) {
+            return String.valueOf(amount * 2.1);
+        }
+    }
+
+    /** AiServices 接口：@MemoryId 作会话隔离键，与 chatMemoryProvider 的 id 对应 */
+    interface CarbonAssistant {
+        @dev.langchain4j.service.SystemMessage(
+                "你是积木LCA云的碳核算助手，回答必须引用因子出处。")
+        String chat(@MemoryId String conversationId, @UserMessage String question);
+    }
+}
+```
+
+#### 追问：
+- 追问1：多轮对话中，如何防止"会话漂移"导致模型忘记用户最初目标？
+  - **答**：
+    - ① 维护全局意图状态机
+    - ② 定期做对话摘要（summarization）写入长期记忆
+    - ③ 关键实体（产品名称、核算边界、标准选择）在每一轮重新注入 system prompt
+    - ④ 对长会话做显式确认，如"您仍在咨询 XX 产品的组织碳核算，对吗？"
+    - 结合 Redis 短期窗口 + MySQL 长期摘要的混合记忆策略。
+- 追问2：工具调用失败时，Agent 应如何优雅降级？
+  - **答**：三层降级：
+    - ① 重试 + 超时控制
+    - ② 切换备用工具或 MCP Server 实例
+    - ③ 向用户说明无法完成并给出可手动操作的方案
+    - 同时记录失败原因用于后续优化，避免模型编造结果（hallucination）。在碳核算场景中，如果因子库查询 MCP Server 不可用，Agent 应告知用户"因子库暂时不可用，可手动选择排放因子"，而不是用错误因子计算。
+- 追问3：报告生成这类"长输出"任务，如何避免 LLM 超时或 token 爆炸？
+  - **答**：把"长输出"拆成"模板 + 数据"两段：LLM 只负责生成报告结构/章节大纲和关键结论，具体数值由计算引擎回填，最终排版用模板引擎（如 Freemarker/Docx4j/PDFBox）。必要时用流式输出 + 异步任务，前端轮询进度，而不是一次性让 LLM 吐完整报告。CBAM 报告这类多章节文档，可按章节拆分多次调用 LLM，最后合并。
+
+
+---

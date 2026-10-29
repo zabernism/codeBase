@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "split": "node scripts/split.mjs",
+    "merge": "node scripts/merge.mjs",
     "dev": "npm run split && vitepress dev docs",
     "build": "npm run split && vitepress build docs",
     "preview": "vitepress preview docs"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "devDependencies": {
     "mermaid": "^11.16.1",

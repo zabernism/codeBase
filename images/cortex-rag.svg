@@ -4,11 +4,11 @@
 <text x="88" y="100.0" text-anchor="middle" dominant-baseline="central" font-size="16" font-weight="700" fill="#374151">知识接入</text>
 <line x1="168" y1="72" x2="168" y2="140" stroke="#cbd5e1" stroke-width="1"/>
 <rect x="184.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
-<text x="344.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">文档上传</text>
-<text x="344.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">Word/PDF/Excel</text>
+<text x="344.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">公开源定时抓取</text>
+<text x="344.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规·标准原文</text>
 <rect x="514.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
-<text x="674.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">业务员录入</text>
-<text x="674.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规·因子·工艺</text>
+<text x="674.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">业务员录入/文档上传</text>
+<text x="674.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">法规·因子·客户文件</text>
 <rect x="844.0" y="71.0" width="320.0" height="70.0" rx="10" fill="#ffffff" stroke="#c7d2fe" stroke-width="2"/>
 <text x="1004.0" y="98.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">内部系统对接</text>
 <text x="1004.0" y="115.0" text-anchor="middle" dominant-baseline="central" font-size="13" fill="#1f2937">ERP·因子库</text>
